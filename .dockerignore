@@ -19,4 +19,3 @@ tests
 pytest.ini
 requirements-dev.txt
 .pytest_cache
-.model_cache

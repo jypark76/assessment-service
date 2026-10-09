@@ -1,30 +1,20 @@
-# In plain English: this is the front door of the assessment service. It answers
-# "are you alive?" and "are you ready to work?", and it lets callers save a
-# graded example, list the saved ones and find the most similar ones.
-from uuid import UUID
-
-import psycopg
+# In plain English: this is the front door of the assessment service. Right now it
+# answers two questions: "are you alive?" and "are you ready to work?". The real
+# features (assignments, submissions, grades and reviews) come in later steps.
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.db import database_is_ready
-from app.examples import (
-    NewExample,
-    SearchRequest,
-    list_examples,
-    save_example,
-    search_examples,
-)
 
 # Create the web application. The title and version show up on the automatic
 # documentation page FastAPI builds at /docs.
-app = FastAPI(title="Assessment service", version="0.5.1")
+app = FastAPI(title="Assessment service", version="0.1.0")
 
 
 # In plain English: the kinds of error whose built-in wording is safe, because it
 # only describes the rule and never quotes what the caller sent. "value_error" is
-# our own check for unstorable text, with fixed wording of our own.
+# for our own checks, which always use fixed wording of our own.
 SAFE_ERROR_KINDS = {
     "missing",
     "extra_forbidden",
@@ -60,7 +50,7 @@ def safe_reason(item):
 
 
 # In plain English: picks the field name to show for one problem. Normally that
-# is the path to the field, like "body.student_work". For an unexpected extra
+# is the path to the field, like "body.assignment_id". For an unexpected extra
 # field the last part of the path is the name the CALLER chose, which is caller
 # data too, so it is left off and the reply names only the place ("body").
 def safe_field(item):
@@ -101,39 +91,3 @@ def ready():
     if database_is_ready():
         return {"ok": True}
     return JSONResponse(status_code=503, content={"ok": False})
-
-
-# In plain English: saves one new graded example. FastAPI first checks the
-# request against the NewExample rules and turns bad requests away on its own
-# (error 422) before any of our code runs. If the database has a problem, the
-# caller gets a plain 503 with no details about why.
-@app.post("/examples", status_code=201)
-def create_example(example: NewExample):
-    try:
-        return {"example_id": save_example(example)}
-    except psycopg.Error:
-        return JSONResponse(status_code=503, content={"ok": False})
-
-
-# In plain English: lists the saved examples for one assignment. The
-# assignment_id must be a real UUID or FastAPI turns the request away (422).
-@app.get("/examples")
-def get_examples(assignment_id: UUID):
-    try:
-        return list_examples(assignment_id)
-    except psycopg.Error:
-        return JSONResponse(status_code=503, content={"ok": False})
-
-
-# In plain English: finds the saved examples closest in meaning to some text. It
-# searches inside the assignment. Only when the caller sets fallback_to_all does an
-# assignment with no examples of its own borrow from every assignment. Bad input is turned away by FastAPI (422) before our
-# code runs; a database problem gives a plain 503 with no details. This is a
-# POST only because the text to compare can be long, not because it saves
-# anything.
-@app.post("/examples/search")
-def search(request: SearchRequest):
-    try:
-        return search_examples(request)
-    except psycopg.Error:
-        return JSONResponse(status_code=503, content={"ok": False})

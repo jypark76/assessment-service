@@ -11,7 +11,3 @@ uvicorn==0.54.0
 # The driver that lets Python talk to the Postgres database. The "binary" part
 # means it comes ready-made, so the box needs no extra build tools.
 psycopg[binary]==3.3.6
-
-# The library that turns text into a list of 384 numbers (an "embedding") using
-# a small AI model that runs inside this service, with no outside calls.
-fastembed==0.9.0

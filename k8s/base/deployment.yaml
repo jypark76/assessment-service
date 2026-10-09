@@ -67,10 +67,10 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
-          # The embedding model lives in memory, so allow room for it.
+          # A small service with no AI model, so it needs little memory.
           resources:
             requests:
               cpu: 100m
-              memory: 512Mi
+              memory: 64Mi
             limits:
-              memory: 1Gi
+              memory: 256Mi
