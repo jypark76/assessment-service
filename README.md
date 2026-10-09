@@ -98,8 +98,10 @@ service pod and more). It needs `kubectl` and is skipped without it. Its self-te
 feed it deliberately broken files, so it cannot pass by never complaining.
 
 `tests/test_database.py`, `tests/test_tables.py`, `tests/test_assignments.py`,
-`tests/test_submissions.py`, `tests/test_grades.py` and `tests/test_reviews.py` need a
-real database and are skipped when none is configured. In the pipeline they run
+`tests/test_submissions.py`, `tests/test_grades.py`, `tests/test_reviews.py` and
+`tests/test_races.py` need a real database and are skipped when none is configured.
+`tests/test_races.py` makes two workers or reviewers act on one submission at once, with
+collisions both planted on purpose and caused by eight threads at the same instant. In the pipeline they run
 against a throwaway Postgres that is built from `db/init.sql` and the first-start
 password script, then destroyed. They refuse to run unless the database is named
 `assessment_test`. The service's login cannot delete rows, so a database used for
@@ -118,7 +120,7 @@ docker run -d --name test-db \
 
 # wait about 20 seconds for the database to finish setting itself up, then:
 DB_HOST=localhost DB_NAME=assessment_test DB_USER=assessment_app DB_PASSWORD=app \
-  .venv/Scripts/python -m pytest -v tests/test_database.py tests/test_tables.py tests/test_assignments.py tests/test_submissions.py tests/test_grades.py tests/test_reviews.py
+  .venv/Scripts/python -m pytest -v tests/test_database.py tests/test_tables.py tests/test_assignments.py tests/test_submissions.py tests/test_grades.py tests/test_reviews.py tests/test_races.py
 
 docker rm -f test-db
 ```
