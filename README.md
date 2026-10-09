@@ -4,8 +4,9 @@ The record keeper for an AI assessment grader. It is one small service in a
 larger set of microservices, built in Python and meant to run on Kubernetes.
 
 **Status: early work in progress.** The two database tables exist and are tested,
-and the assignment, submission and grade routes work. The instructor's review
-(reject and approve) is not written yet.
+and the assignment, submission, grade and review routes work, so a submission can go
+through its whole life: submitted, graded, rejected, graded again and approved. Sending
+approved examples on to the knowledge service is not written yet.
 
 ## What it will do
 
@@ -42,6 +43,8 @@ never change or delete them.
 | `GET /assignments/{id}` | Read one assignment with its rubric, or 404 |
 | `POST /submissions` | Send a student's work in as version 1. Answers 201, 200 for a retry, 404 for an unknown assignment, or 409 if the ID is used for different content |
 | `GET /submissions/{id}` | Read a submission with its history, one entry per version, or 404 |
+| `GET /submissions?status=` | List the submissions whose newest version has that status, oldest first (`status=graded` is the queue waiting for an instructor). Optional `assignment_id` and `limit` 1 to 100, default 50. No names or essays in the list |
+| `POST /submissions/{id}/reviews` | Record an instructor's approve or reject as the next version. Answers 201, 200 for a retry, 404 for an unknown submission, or 409 if the submission has moved on or is not waiting for review |
 | `POST /submissions/{id}/grades` | Record a grade as the next version. Answers 201, 200 for a retry, 404 for an unknown submission, or 409 if the submission has moved on or is not waiting for a grade |
 
 There is no way to change or delete an assignment or a submission through the API.
@@ -60,6 +63,15 @@ back (200) with nothing added. If the submission has moved on, or that version a
 has a different grade, the answer is 409 and nothing changes, so two workers can never
 both win. Only a new submission, or one an instructor rejected, can be graded. One that
 is already graded or approved cannot.
+
+A review works the same way. The reviewer sends `based_on_version` (the grade being
+reviewed), a `decision` of `approve` or `reject`, and a `reviewer_username`. A rejection
+must carry feedback and an approval must not. The review is added as the next version
+(`rejected` or `approved`) and copies the grade it is about. Only a submission whose
+newest version is a grade can be reviewed. A rejected submission goes back to the grader
+for a new grade, and an approved one is final. A retry returns the saved review (200), and
+a different review for a version that already has one gets a 409, so two reviewers can
+never both win.
 
 Bad input is refused with a 422 that names the field and the reason but never repeats
 what the caller sent, not even the name of a field the caller invented. Text with a
@@ -86,7 +98,8 @@ service pod and more). It needs `kubectl` and is skipped without it. Its self-te
 feed it deliberately broken files, so it cannot pass by never complaining.
 
 `tests/test_database.py`, `tests/test_tables.py`, `tests/test_assignments.py`,
-`tests/test_submissions.py` and `tests/test_grades.py` need a real database and are skipped when none is configured. In the pipeline they run
+`tests/test_submissions.py`, `tests/test_grades.py` and `tests/test_reviews.py` need a
+real database and are skipped when none is configured. In the pipeline they run
 against a throwaway Postgres that is built from `db/init.sql` and the first-start
 password script, then destroyed. They refuse to run unless the database is named
 `assessment_test`. The service's login cannot delete rows, so a database used for
@@ -105,7 +118,7 @@ docker run -d --name test-db \
 
 # wait about 20 seconds for the database to finish setting itself up, then:
 DB_HOST=localhost DB_NAME=assessment_test DB_USER=assessment_app DB_PASSWORD=app \
-  .venv/Scripts/python -m pytest -v tests/test_database.py tests/test_tables.py tests/test_assignments.py tests/test_submissions.py tests/test_grades.py
+  .venv/Scripts/python -m pytest -v tests/test_database.py tests/test_tables.py tests/test_assignments.py tests/test_submissions.py tests/test_grades.py tests/test_reviews.py
 
 docker rm -f test-db
 ```
@@ -146,7 +159,12 @@ On AWS the database is RDS, so the Postgres pod is not used there.
 - The service has no authentication. It does not check who is calling, so anyone
   who can reach it can create and read assignments, can read any submission,
   including the student's name and essay, if they know its ID, and could write a
-  grade to a submission that is waiting for one. Who may see what is
+  grade to a submission that is waiting for one.
+- `reviewer_username` is a name the caller claims, not a proven identity, so anyone who
+  can reach the service can approve or reject a grade. That is acceptable only while
+  nothing consumes approvals. Before approved examples are sent on to the knowledge
+  service (the store the grader learns from), callers must be authenticated, or a forged
+  approval could put a bad example into future grading. Who may see what is
   decided when the frontend arrives. Student names are stored only in this service.
 - Reachability is limited by the network only: the service is `ClusterIP`, so nothing
   outside the cluster can reach it, but there is no rule yet on which pods inside the
