@@ -7,7 +7,7 @@ import psycopg
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.db import connect
-from app.text_rules import must_be_storable_text, trimmed
+from app.text_rules import long_text, trimmed
 
 INSTRUCTOR_MAX = 100
 TITLE_MAX = 200
@@ -44,10 +44,7 @@ class NewAssignment(BaseModel):
     @field_validator("rubric")
     @classmethod
     def rubric_rules(cls, value):
-        must_be_storable_text(value)
-        if not value.strip() or len(value) > RUBRIC_MAX:
-            raise ValueError(f"Must be 1 to {RUBRIC_MAX} characters and not blank")
-        return value
+        return long_text(value, RUBRIC_MAX)
 
 
 # In plain English: turns one database row into the reply a caller sees.

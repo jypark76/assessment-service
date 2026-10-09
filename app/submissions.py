@@ -9,7 +9,7 @@ import psycopg
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.db import connect
-from app.text_rules import must_be_storable_text, trimmed
+from app.text_rules import long_text, trimmed
 
 NAME_MAX = 200
 TEXT_MAX = 20_000
@@ -47,10 +47,7 @@ class NewSubmission(BaseModel):
     @field_validator("submission_text")
     @classmethod
     def text_rules(cls, value):
-        must_be_storable_text(value)
-        if not value.strip() or len(value) > TEXT_MAX:
-            raise ValueError(f"Must be 1 to {TEXT_MAX} characters and not blank")
-        return value
+        return long_text(value, TEXT_MAX)
 
 
 # In plain English: turns a version 1 row into the reply a caller sees.
