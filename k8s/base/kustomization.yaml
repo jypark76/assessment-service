@@ -1,0 +1,9 @@
+# In plain English: the shared list of pieces that every environment needs. The
+# ConfigMap is NOT here on purpose, because its values differ per environment;
+# each overlay supplies its own. Do not apply this folder by itself.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - service.yaml

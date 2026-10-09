@@ -1,0 +1,17 @@
+# In plain English: the list of outside Python libraries this service needs.
+# Versions are pinned to exact numbers on purpose, so a surprise new release
+# can never change the service without us choosing to update it.
+
+# The web framework that receives requests and checks incoming data.
+fastapi==0.142.4
+
+# The small web server that actually runs the FastAPI app.
+uvicorn==0.54.0
+
+# The driver that lets Python talk to the Postgres database. The "binary" part
+# means it comes ready-made, so the box needs no extra build tools.
+psycopg[binary]==3.3.6
+
+# The library that turns text into a list of 384 numbers (an "embedding") using
+# a small AI model that runs inside this service, with no outside calls.
+fastembed==0.9.0

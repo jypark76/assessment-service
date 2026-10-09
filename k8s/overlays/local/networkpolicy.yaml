@@ -1,0 +1,44 @@
+# In plain English: a door rule for the database pod. By default every pod in
+# the cluster can open a connection to the database. This rule changes that: once
+# it is in place, ONLY pods labelled "app: knowledge-service" may connect, and
+# only to the database's own port (5432). Every other pod is turned away, even
+# one in the same namespace.
+#
+# It lives in the "local" overlay because the database pod itself is laptop only.
+# On AWS the database is RDS, and who may reach it is set by an AWS security
+# group instead.
+#
+# Heads up: a NetworkPolicy is only a request. The cluster's network layer has to
+# carry it out, and not every cluster does. Always test that a wrong pod is
+# really blocked, never assume it.
+#
+# NOT VERIFIED LOCALLY: tested on 2026-10-07 on Docker Desktop's built-in cluster,
+# a pod with the wrong label still reached the database both before and after this
+# rule was applied. That cluster has no network plugin that enforces policies, so
+# here the rule does nothing. Treat it as written but unproven until it is tested
+# on a cluster that enforces policies (for example EKS with network policy turned
+# on): start a pod labelled app=intruder, try to reach knowledge-db on port 5432,
+# and confirm it is blocked.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: knowledge-db-allow-service-only
+  namespace: knowledge
+spec:
+  # Which pods this rule protects: the database pod.
+  podSelector:
+    matchLabels:
+      app: knowledge-db
+  # Only incoming connections are controlled here. Outgoing traffic is not
+  # restricted yet.
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        # The only pods allowed in: the knowledge service.
+        - podSelector:
+            matchLabels:
+              app: knowledge-service
+      ports:
+        - protocol: TCP
+          port: 5432

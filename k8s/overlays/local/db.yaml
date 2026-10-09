@@ -1,0 +1,121 @@
+# In plain English: this file runs a Postgres database INSIDE the local cluster,
+# for learning and laptop work only. It belongs to the "local" overlay. On AWS
+# this file is not used: the real database there is RDS, and the app just
+# points at its address instead.
+#
+# It expects a Secret named "knowledge-db" in the "knowledge" room, with two
+# passwords: "postgres-password" (the database administrator) and
+# "app-password" (the limited login the service uses). You create that Secret
+# by typing a command yourself. It is never stored in this repo.
+#
+# The database sets itself up on its FIRST start (empty disk): it runs the
+# table setup (db/init.sql, put into a ConfigMap called knowledge-db-init by
+# deploy.sh) and then set-app-password.sh. Postgres skips both on later starts.
+# To start from scratch, delete the Deployment and the disk, then deploy again.
+
+# Part 1: a reserved piece of disk, so the data survives if the pod restarts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: knowledge-db-data
+  namespace: knowledge
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Part 2: the database program itself. "Recreate" means the old pod is stopped
+# before a new one starts, because two databases must never share one disk.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: knowledge-db
+  namespace: knowledge
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: knowledge-db
+  template:
+    metadata:
+      labels:
+        app: knowledge-db
+    spec:
+      containers:
+        - name: postgres
+          # Same database image you used with Docker: Postgres plus pgvector.
+          image: pgvector/pgvector:0.8.7-pg17
+          ports:
+            - containerPort: 5432
+          env:
+            # Creates an empty database called "knowledge" on first start.
+            - name: POSTGRES_DB
+              value: knowledge
+            # The administrator password comes from the Secret, not from here.
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: knowledge-db
+                  key: postgres-password
+            # The service login's password, handed in only so we can set it
+            # once from inside the pod without typing it on the command line.
+            - name: APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: knowledge-db
+                  key: app-password
+            # Keep the data in a sub-folder of the disk, because the disk's
+            # top level can contain a folder Postgres refuses to start with.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            # The "first start" scripts Postgres runs on an empty disk.
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          # Kubernetes only counts the database as "ready" once it answers.
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "knowledge"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: knowledge-db-data
+        # Both ConfigMaps are shown as one folder of scripts. 0755 lets
+        # Postgres run the .sh one.
+        - name: initdb
+          projected:
+            defaultMode: 0755
+            sources:
+              - configMap:
+                  name: knowledge-db-init
+              - configMap:
+                  name: knowledge-db-init-password
+---
+# Part 3: a fixed internal address, "knowledge-db", so the app can find the
+# database by name. It has no outside port: only things inside the cluster can
+# reach it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: knowledge-db
+  namespace: knowledge
+spec:
+  selector:
+    app: knowledge-db
+  ports:
+    - port: 5432
+      targetPort: 5432

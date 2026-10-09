@@ -1,0 +1,76 @@
+# In plain English: tells the cluster to run one copy of the knowledge service
+# and to keep it running. If it crashes, Kubernetes starts a new one.
+# This is the shared "base": it is the same in every environment. The settings
+# that differ (the database address, the image version) live in the overlays.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: knowledge-service
+  namespace: knowledge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: knowledge-service
+  template:
+    metadata:
+      labels:
+        app: knowledge-service
+    spec:
+      # Safety rules for the pod: never run as the all-powerful root user.
+      # 1000 is the number of "appuser" inside our image.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: knowledge-service
+          # The image NAME only. The version tag is added by each overlay (see
+          # the "images" part of its kustomization.yaml), never "latest":
+          # Kubernetes tries to download "latest" images, and the local one only
+          # exists on this laptop. On AWS the overlay swaps in the ECR address.
+          image: knowledge-service
+          # Use the local copy if there is one; do not try to download.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          # Load the non-secret settings (DB_HOST and friends) from the
+          # ConfigMap, which each overlay supplies under this same name.
+          envFrom:
+            - configMapRef:
+                name: knowledge-service-config
+          env:
+            # The password comes from the Secret you created, not from any file.
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: knowledge-db
+                  key: app-password
+          # "Are you alive?" If this keeps failing, Kubernetes restarts the pod.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          # "Are you ready for work?" Traffic is only sent once this passes,
+          # which also means the database login worked.
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          # Extra lockdown: no privilege tricks, and every special Linux power
+          # taken away.
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          # The embedding model lives in memory, so allow room for it.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 1Gi

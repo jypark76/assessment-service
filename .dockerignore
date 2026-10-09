@@ -1,0 +1,22 @@
+# In plain English: files Docker should leave out of the box it builds, so the
+# image stays small and no secrets or private notes are packed inside.
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+.env
+*.env
+*.pem
+*.key
+docs-private
+db
+*.md
+# Not needed inside the image: tests, cluster files and pipeline settings.
+k8s
+tests
+.github
+pytest.ini
+requirements-dev.txt
+.pytest_cache
+.model_cache

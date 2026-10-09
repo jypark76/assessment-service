@@ -1,0 +1,24 @@
+# In plain English: the settings for running on your own laptop. It takes the
+# shared base, adds the settings for the local database, adds the Postgres pod
+# (laptop only; on AWS the database is RDS), and picks the local image version.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - configmap.yaml
+  - db.yaml
+  - networkpolicy.yaml
+images:
+  - name: knowledge-service
+    newTag: "0.5.1"
+# Packs the password-setting script into a ConfigMap. The name suffix is turned
+# off so the database pod can refer to it by its plain name. The namespace is
+# written out because a generated ConfigMap does not get one automatically, and
+# without it the ConfigMap lands in the wrong room and the pod cannot find it.
+configMapGenerator:
+  - name: knowledge-db-init-password
+    namespace: knowledge
+    files:
+      - 02-set-app-password.sh=set-app-password.sh
+generatorOptions:
+  disableNameSuffixHash: true

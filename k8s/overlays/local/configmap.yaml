@@ -1,0 +1,15 @@
+# In plain English: the service's NON-secret settings, kept in one place. The
+# password is not here; it comes from the Secret (see deployment.yaml). To move
+# to AWS, change DB_HOST to the RDS address and nothing else.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: knowledge-service-config
+  namespace: knowledge
+data:
+  # The internal address of the database inside the cluster.
+  DB_HOST: knowledge-db
+  DB_PORT: "5432"
+  DB_NAME: knowledge
+  # The limited login that can only read and add examples.
+  DB_USER: knowledge_app

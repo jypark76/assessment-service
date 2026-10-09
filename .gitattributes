@@ -1,0 +1,3 @@
+# In plain English: keep shell scripts with Unix line endings even on
+# Windows, because the Windows style breaks them when they run.
+*.sh text eol=lf

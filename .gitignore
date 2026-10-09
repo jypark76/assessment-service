@@ -1,0 +1,31 @@
+# In plain English: a list of files Git must never save or upload. This repo
+# is PUBLIC, so anything secret that sneaks in is visible to the whole world.
+
+# Passwords, API keys and login files - never commit these
+.env
+*.env
+*.pem
+*.key
+set_key.sh
+
+# Kubernetes secret files, including templates - none of them go in this repo
+*secret*.yaml
+*secret*.yml
+secrets/
+kubeconfig*
+
+# Private notes and security gap lists never belong in a public repo
+docs-private/
+
+# Build clutter and tool noise
+__pycache__/
+*.pyc
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# The private folder where Python keeps its libraries while testing locally
+.venv/
+.pytest_cache/
+.model_cache/

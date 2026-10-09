@@ -1,0 +1,8 @@
+# In plain English: creates a private "room" inside the cluster called
+# "knowledge". Everything for this service (database, app, settings) goes in
+# this room, so it stays separate from other projects and from Kubernetes's own
+# helper programs.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: knowledge

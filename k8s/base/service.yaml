@@ -1,0 +1,14 @@
+# In plain English: gives the service a fixed internal address,
+# "knowledge-service:8000", that other things inside the cluster can use. It has
+# no outside port, so nothing outside the cluster can reach it directly.
+apiVersion: v1
+kind: Service
+metadata:
+  name: knowledge-service
+  namespace: knowledge
+spec:
+  selector:
+    app: knowledge-service
+  ports:
+    - port: 8000
+      targetPort: 8000
