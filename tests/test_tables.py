@@ -10,6 +10,7 @@
 #
 # Every refusal is paired with a control: the same step done correctly must work. So a
 # refusal can only mean "the rule works", never "the table is missing".
+import hashlib
 import uuid
 
 import psycopg
@@ -41,12 +42,13 @@ def rows(sql, params=()):
 # In plain English: adds an assignment and returns its ID. Titles must be unique, so
 # each one gets a random title unless the test passes one. An empty title counts as
 # "passed", so a test can check that it is refused.
-def add_assignment(title=None, rubric="Grade for clarity and evidence."):
+def add_assignment(title=None, rubric="Grade for clarity and evidence.",
+                   instructor="instructor1"):
     assignment_id = new_id()
     run(
         "INSERT INTO assignments (assignment_id, instructor_username, title, rubric) "
         "VALUES (%s, %s, %s, %s)",
-        (assignment_id, "instructor1",
+        (assignment_id, instructor,
          title if title is not None else f"Essay {assignment_id}", rubric),
     )
     return assignment_id
@@ -117,6 +119,28 @@ def test_a_duplicate_assignment_title_is_refused():
 
     with pytest.raises(psycopg.errors.UniqueViolation):
         add_assignment(title=title)
+
+
+# In plain English: "unique" means unique to a person reading it. A title that differs
+# only by capital letters or by spaces at either end counts as the same title. The plain
+# title goes in first (the control), then each look-alike is refused.
+def test_titles_that_differ_only_by_case_or_spaces_are_refused():
+    title = f"Essay {new_id()}"
+    add_assignment(title=title)
+
+    for look_alike in (title + " ", " " + title, title.upper()):
+        with pytest.raises(psycopg.errors.UniqueViolation):
+            add_assignment(title=look_alike)
+
+
+# In plain English: every assignment must name its instructor. A real name goes in (the
+# control), and an empty or spaces-only name is refused.
+def test_an_assignment_needs_a_named_instructor():
+    add_assignment(instructor="instructor1")
+
+    for bad_name in ("", "   "):
+        with pytest.raises(psycopg.errors.CheckViolation):
+            add_assignment(instructor=bad_name)
 
 
 # In plain English: a title must be between 1 and 200 characters once spaces are trimmed,
@@ -228,6 +252,21 @@ def test_a_later_version_cannot_change_what_was_submitted():
         add_graded(submission_id, 3, assignment_id, name="Blake", text="The original essay.")
     with pytest.raises(psycopg.errors.IntegrityError):
         add_graded(submission_id, 3, other_assignment, name="Alex", text="The original essay.")
+
+
+# In plain English: the fingerprint that guards the submitted work is SHA-256, not the
+# older MD5 that can be forged on purpose. The test computes the SHA-256 itself from the
+# assignment, the name and the essay, and checks the database stored the same value. The
+# name's length goes in so two different name and essay splits cannot match.
+def test_the_fingerprint_is_sha256_of_the_submitted_work():
+    assignment_id = add_assignment()
+    submission_id = start_submission(assignment_id, name="Alex", text="The original essay.")
+
+    stored = rows("SELECT content_hash FROM submissions WHERE submission_id = %s", (submission_id,))
+    expected = hashlib.sha256(
+        f"{assignment_id}|{len('Alex')}|Alex|The original essay.".encode("utf-8")
+    ).hexdigest()
+    assert stored == [(expected,)]
 
 
 # In plain English: a long essay still works. The guard must handle text far longer than

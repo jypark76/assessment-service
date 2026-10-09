@@ -20,20 +20,32 @@ $$;
 -- or change the database's structure even if it has a bug.
 GRANT USAGE ON SCHEMA public TO assessment_app;
 
+-- Turns on Postgres's bundled "pgcrypto" add-on, which provides the SHA-256 hashing
+-- used by the guard on the submissions table. This file runs as the database's setup
+-- account, which is allowed to do this. The service's limited login gets no extra
+-- rights from it.
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- ---------------------------------------------------------------------------
 -- Table 1: assignments. One row per assignment an instructor sets up.
 -- ---------------------------------------------------------------------------
 CREATE TABLE assignments (
   assignment_id       uuid PRIMARY KEY,
-  instructor_username text NOT NULL,
-  -- Titles are unique across the whole system, 1 to 200 characters once the
-  -- spaces at either end are trimmed.
-  title               text NOT NULL UNIQUE
+  -- Every assignment names its instructor, so it can never be left without an owner.
+  instructor_username text NOT NULL CHECK (char_length(btrim(instructor_username)) >= 1),
+  -- 1 to 200 characters once the spaces at either end are trimmed. Uniqueness is
+  -- enforced by the index below, which ignores capital letters and outer spaces.
+  title               text NOT NULL
                       CHECK (char_length(btrim(title)) BETWEEN 1 AND 200),
   -- The instructions the grader works from. It must not be blank.
   rubric              text NOT NULL CHECK (char_length(btrim(rubric)) >= 1),
   created_at          timestamptz NOT NULL DEFAULT now()
 );
+
+-- Titles are unique across the whole system, the way a person would read them:
+-- "Essay 1", "Essay 1 " and "essay 1" count as the same title.
+CREATE UNIQUE INDEX assignments_title_unique
+  ON assignments (lower(btrim(title)));
 
 -- ---------------------------------------------------------------------------
 -- Table 2: submissions. One row per VERSION of a submission, never updated.
@@ -80,11 +92,13 @@ CREATE TABLE submissions (
 
   -- THE GUARD. A fingerprint (hash) of the assignment, the student's name and the
   -- essay. A hash is used because Postgres cannot index a long essay directly, and
-  -- essays here can be 20,000 characters. The length of the name goes in as well,
-  -- so two different name and essay splits can never produce the same fingerprint.
+  -- essays here can be 20,000 characters. It is SHA-256, because the older MD5 can be
+  -- forged on purpose. The length of the name goes in as well, so two different name
+  -- and essay splits can never produce the same fingerprint.
   content_hash      text GENERATED ALWAYS AS (
-                      md5(assignment_id::text || '|' || char_length(student_name)::text
-                          || '|' || student_name || '|' || submission_text)
+                      encode(digest(
+                        assignment_id::text || '|' || char_length(student_name)::text
+                        || '|' || student_name || '|' || submission_text, 'sha256'), 'hex')
                     ) STORED,
 
   -- Every version points back at version 1 and must carry the same fingerprint.
