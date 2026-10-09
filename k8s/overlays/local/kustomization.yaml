@@ -10,7 +10,7 @@ resources:
   - networkpolicy.yaml
 images:
   - name: assessment-service
-    newTag: "0.3.0"
+    newTag: "0.5.0"
 # Packs the password-setting script into a ConfigMap. The name suffix is turned
 # off so the database pod can refer to it by its plain name. The namespace is
 # written out because a generated ConfigMap does not get one automatically, and
