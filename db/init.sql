@@ -21,3 +21,4 @@ $$;
 -- each table (read and add rows, never change or delete them) will be granted
 -- together with the tables themselves.
 GRANT USAGE ON SCHEMA public TO assessment_app;
+GRANT CREATE ON SCHEMA public TO assessment_app;
