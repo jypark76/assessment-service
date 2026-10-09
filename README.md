@@ -3,9 +3,9 @@
 The record keeper for an AI assessment grader. It is one small service in a
 larger set of microservices, built in Python and meant to run on Kubernetes.
 
-**Status: early work in progress.** A runnable skeleton exists: the health
-checks, an empty database with its limited login, the tests and pipeline, and the
-Kubernetes files. The tables and the real routes are not written yet.
+**Status: early work in progress.** The two database tables exist and are tested,
+and the assignment routes work. The submission routes, grading and review are not
+written yet.
 
 ## What it will do
 
@@ -23,10 +23,13 @@ Its own Postgres database with two tables, `assignments` and a versioned
 `submissions` table. No other service reads that database directly. Other
 services ask this service through its API.
 
-Today the database holds no tables. The setup in [`db/init.sql`](db/init.sql)
-only creates the service's limited login, which can connect but cannot create
-anything. The permissions for each table will be granted together with the table:
-read and add rows, never change or delete them.
+The setup in [`db/init.sql`](db/init.sql) creates the service's limited login and
+the two tables. The database itself enforces the rules: a title is unique ignoring
+capital letters and outer spaces, each status carries only its own fields, a version
+number is used once, a submission has at most one approval, and every later version
+must repeat the name, essay and assignment of version 1 (checked with a SHA-256
+fingerprint, using Postgres's bundled `pgcrypto`). The login can read and add rows,
+never change or delete them.
 
 ## API
 
@@ -34,10 +37,14 @@ read and add rows, never change or delete them.
 |---|---|
 | `GET /health` | Report whether the service is alive |
 | `GET /ready` | Report whether the service can reach its database |
+| `POST /assignments` | Create an assignment (instructor, title, rubric). Answers 201, or 409 if the title is in use |
+| `GET /assignments` | List the newest assignments, without rubrics (`limit` 1 to 100, default 50) |
+| `GET /assignments/{id}` | Read one assignment with its rubric, or 404 |
 
-The assignment and submission routes come with the tables. Bad input is refused
-with a 422 that names the field and the reason but never repeats what the caller
-sent, not even the name of a field the caller invented.
+There is no way to change or delete an assignment through the API. The submission
+routes come next. Bad input is refused with a 422 that names the field and the
+reason but never repeats what the caller sent, not even the name of a field the
+caller invented.
 
 ## Tests
 
@@ -59,11 +66,14 @@ checks them against our rules (namespace, no Secret, fixed image tags, a locked-
 service pod and more). It needs `kubectl` and is skipped without it. Its self-tests
 feed it deliberately broken files, so it cannot pass by never complaining.
 
-`tests/test_database.py` needs a real database and is skipped when none is
-configured. In the pipeline it runs against a throwaway Postgres that is built
-from `db/init.sql` and the first-start password script, then destroyed. It refuses
-to run unless the database is named `assessment_test`. To run it yourself, start a
-temporary container (use any passwords you like) and point the settings at it:
+`tests/test_database.py`, `tests/test_tables.py` and `tests/test_assignments.py` need a
+real database and are skipped when none is configured. In the pipeline they run
+against a throwaway Postgres that is built from `db/init.sql` and the first-start
+password script, then destroyed. They refuse to run unless the database is named
+`assessment_test`. The service's login cannot delete rows, so a database used for
+several runs keeps the rows of earlier runs, and the tests use random titles for
+that reason. To run them yourself, start a temporary container (use any passwords
+you like) and point the settings at it:
 
 ```
 # In Git Bash on Windows, put MSYS_NO_PATHCONV=1 before "docker run". Without it
@@ -76,7 +86,7 @@ docker run -d --name test-db \
 
 # wait about 20 seconds for the database to finish setting itself up, then:
 DB_HOST=localhost DB_NAME=assessment_test DB_USER=assessment_app DB_PASSWORD=app \
-  .venv/Scripts/python -m pytest -v tests/test_database.py
+  .venv/Scripts/python -m pytest -v tests/test_database.py tests/test_tables.py tests/test_assignments.py
 
 docker rm -f test-db
 ```
@@ -114,16 +124,23 @@ On AWS the database is RDS, so the Postgres pod is not used there.
 
 ## Known limits
 
-- The service has no authentication yet and is internal-only. Who may see what
-  is decided when the frontend arrives.
-- The NetworkPolicy is written but not verified, because Docker Desktop's
-  built-in cluster does not enforce it.
+- The service has no authentication. It does not check who is calling, so anyone
+  who can reach it can create and read assignments, and later read student names.
+  Who may see what is decided when the frontend arrives.
+- Reachability is limited by the network only: the service is `ClusterIP`, so nothing
+  outside the cluster can reach it, but there is no rule yet on which pods inside the
+  cluster may call it. That rule is planned for when the real callers exist.
+- The NetworkPolicy on the database is written but not verified, because Docker
+  Desktop's built-in cluster does not enforce it.
+- If the database is down, the routes answer a plain 500 with no details.
 
 ## Security notes
 
 - This repo is public. It never contains passwords, API keys or Kubernetes
   Secret files, not even templates.
-- The service's database login can connect but cannot create tables. Once the
-  tables exist it will be able to read and add rows but not change or delete them.
+- The service's database login can read and add rows but cannot create tables or
+  change or delete rows, and tests prove each refusal.
+- Error replies never repeat what the caller sent, and tests plant a marker string
+  to prove it.
 - The database passwords live only in a Kubernetes Secret that is created by
   hand with a command. They are never written into any file.

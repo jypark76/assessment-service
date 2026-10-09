@@ -1,15 +1,25 @@
-# In plain English: this is the front door of the assessment service. Right now it
-# answers two questions: "are you alive?" and "are you ready to work?". The real
-# features (assignments, submissions, grades and reviews) come in later steps.
-from fastapi import FastAPI, Request
+# In plain English: this is the front door of the assessment service. It answers two
+# questions, "are you alive?" and "are you ready to work?", and it offers the
+# assignment routes (create one, read one, list the newest). Submissions, grades and
+# reviews come in later steps.
+from uuid import UUID
+
+from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.assignments import (
+    NewAssignment,
+    TitleInUse,
+    create_assignment,
+    get_assignment,
+    list_assignments,
+)
 from app.db import database_is_ready
 
 # Create the web application. The title and version show up on the automatic
 # documentation page FastAPI builds at /docs.
-app = FastAPI(title="Assessment service", version="0.1.0")
+app = FastAPI(title="Assessment service", version="0.2.0")
 
 
 # In plain English: the kinds of error whose built-in wording is safe, because it
@@ -80,6 +90,37 @@ def bad_input(request: Request, error: RequestValidationError):
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+# In plain English: creates an assignment and answers 201 with the saved assignment,
+# including the ID the service gave it. If the title is already in use, it answers 409
+# with fixed wording that does not quote the title.
+@app.post("/assignments", status_code=201)
+def add_assignment(body: NewAssignment):
+    try:
+        return create_assignment(body)
+    except TitleInUse:
+        return JSONResponse(
+            status_code=409,
+            content={"problem": "An assignment with this title already exists"},
+        )
+
+
+# In plain English: lists the newest assignments first, without their rubrics. The
+# caller can ask for 1 to 100 of them, and gets 50 if it does not say.
+@app.get("/assignments")
+def assignment_list(limit: int = Query(50, ge=1, le=100)):
+    return list_assignments(limit)
+
+
+# In plain English: reads one assignment, rubric included. An ID that does not exist
+# answers 404, and the reply does not repeat the ID.
+@app.get("/assignments/{assignment_id}")
+def assignment_detail(assignment_id: UUID):
+    found = get_assignment(assignment_id)
+    if found is None:
+        return JSONResponse(status_code=404, content={"problem": "Assignment not found"})
+    return found
 
 
 # In plain English: an "are you ready to work?" check. It answers {"ok": true}
