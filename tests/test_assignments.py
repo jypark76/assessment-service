@@ -8,6 +8,7 @@
 #
 # Every refusal is paired with a control: the same request done correctly must work.
 # Bad values carry the marker SECRET-MARKER, and no reply may ever contain it.
+import json
 import uuid
 
 import pytest
@@ -177,6 +178,30 @@ def test_bad_input_names_the_field_and_never_the_value():
     assert response.status_code == 422
     assert [problem["field"] for problem in response.json()["problems"]] == ["body"]
     assert "SECRET-MARKER" not in response.text
+
+
+# In plain English: text the database cannot store is refused as bad input, not left to
+# fail inside the database as a 500. That means a null character (the invisible
+# character with code zero) and a lone surrogate (half of a pair, which cannot be
+# written out as UTF-8). Both are tried in every text field. The reply names the field
+# only and never repeats the text. A request with clean text first is the control.
+def test_text_the_database_cannot_store_is_refused_in_every_text_field():
+    assert create().status_code == 201
+
+    for field in ("title", "instructor_username", "rubric"):
+        for bad_text in ("SECRET-MARKER\u0000abc", "SECRET-MARKER\ud800abc"):
+            body = good_body()
+            body[field] = bad_text
+            # json.dumps writes the bad characters as plain escapes (\u0000, \ud800), so
+            # the test client never has to encode them itself.
+            response = client.post(
+                "/assignments",
+                content=json.dumps(body),
+                headers={"Content-Type": "application/json"},
+            )
+            assert response.status_code == 422, (field, bad_text)
+            assert [problem["field"] for problem in response.json()["problems"]] == [f"body.{field}"]
+            assert "SECRET-MARKER" not in response.text
 
 
 # In plain English: the limits are exact. A 200 character title, a 100 character

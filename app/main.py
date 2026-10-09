@@ -1,6 +1,7 @@
-# In plain English: this is the front door of the assessment service. Right now it
-# answers two questions: "are you alive?" and "are you ready to work?". The real
-# features (assignments, submissions, grades and reviews) come in later steps.
+# In plain English: this is the front door of the assessment service. It answers two
+# questions, "are you alive?" and "are you ready to work?", and it offers the
+# assignment routes (create one, read one, list the newest). Submissions, grades and
+# reviews come in later steps.
 from uuid import UUID
 
 from fastapi import FastAPI, Query, Request

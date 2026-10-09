@@ -7,6 +7,7 @@ import psycopg
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.db import connect
+from app.text_rules import must_be_storable_text
 
 INSTRUCTOR_MAX = 100
 TITLE_MAX = 200
@@ -19,10 +20,11 @@ class TitleInUse(Exception):
     pass
 
 
-# In plain English: trims the spaces at either end and checks the length. The wording
-# of the refusal is fixed and never quotes what the caller sent.
+# In plain English: first checks the text can be stored at all, then trims the spaces
+# at either end and checks the length. The wording of each refusal is fixed and never
+# quotes what the caller sent.
 def _trimmed(value, longest):
-    value = value.strip()
+    value = must_be_storable_text(value).strip()
     if not 1 <= len(value) <= longest:
         raise ValueError(f"Must be 1 to {longest} characters after trimming spaces")
     return value
@@ -52,6 +54,7 @@ class NewAssignment(BaseModel):
     @field_validator("rubric")
     @classmethod
     def rubric_rules(cls, value):
+        must_be_storable_text(value)
         if not value.strip() or len(value) > RUBRIC_MAX:
             raise ValueError(f"Must be 1 to {RUBRIC_MAX} characters and not blank")
         return value
