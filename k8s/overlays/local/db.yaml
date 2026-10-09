@@ -3,13 +3,13 @@
 # this file is not used: the real database there is RDS, and the app just
 # points at its address instead.
 #
-# It expects a Secret named "knowledge-db" in the "knowledge" room, with two
+# It expects a Secret named "assessment-db" in the "assessment" room, with two
 # passwords: "postgres-password" (the database administrator) and
 # "app-password" (the limited login the service uses). You create that Secret
 # by typing a command yourself. It is never stored in this repo.
 #
 # The database sets itself up on its FIRST start (empty disk): it runs the
-# table setup (db/init.sql, put into a ConfigMap called knowledge-db-init by
+# table setup (db/init.sql, put into a ConfigMap called assessment-db-init by
 # deploy.sh) and then set-app-password.sh. Postgres skips both on later starts.
 # To start from scratch, delete the Deployment and the disk, then deploy again.
 
@@ -17,8 +17,8 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: knowledge-db-data
-  namespace: knowledge
+  name: assessment-db-data
+  namespace: assessment
 spec:
   accessModes: ["ReadWriteOnce"]
   resources:
@@ -30,19 +30,19 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: knowledge-db
-  namespace: knowledge
+  name: assessment-db
+  namespace: assessment
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      app: knowledge-db
+      app: assessment-db
   template:
     metadata:
       labels:
-        app: knowledge-db
+        app: assessment-db
     spec:
       containers:
         - name: postgres
@@ -51,21 +51,21 @@ spec:
           ports:
             - containerPort: 5432
           env:
-            # Creates an empty database called "knowledge" on first start.
+            # Creates an empty database called "assessment" on first start.
             - name: POSTGRES_DB
-              value: knowledge
+              value: assessment
             # The administrator password comes from the Secret, not from here.
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: knowledge-db
+                  name: assessment-db
                   key: postgres-password
             # The service login's password, handed in only so we can set it
             # once from inside the pod without typing it on the command line.
             - name: APP_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: knowledge-db
+                  name: assessment-db
                   key: app-password
             # Keep the data in a sub-folder of the disk, because the disk's
             # top level can contain a folder Postgres refuses to start with.
@@ -81,7 +81,7 @@ spec:
           # Kubernetes only counts the database as "ready" once it answers.
           readinessProbe:
             exec:
-              command: ["pg_isready", "-U", "postgres", "-d", "knowledge"]
+              command: ["pg_isready", "-U", "postgres", "-d", "assessment"]
             initialDelaySeconds: 5
             periodSeconds: 5
           resources:
@@ -93,7 +93,7 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: knowledge-db-data
+            claimName: assessment-db-data
         # Both ConfigMaps are shown as one folder of scripts. 0755 lets
         # Postgres run the .sh one.
         - name: initdb
@@ -101,21 +101,21 @@ spec:
             defaultMode: 0755
             sources:
               - configMap:
-                  name: knowledge-db-init
+                  name: assessment-db-init
               - configMap:
-                  name: knowledge-db-init-password
+                  name: assessment-db-init-password
 ---
-# Part 3: a fixed internal address, "knowledge-db", so the app can find the
+# Part 3: a fixed internal address, "assessment-db", so the app can find the
 # database by name. It has no outside port: only things inside the cluster can
 # reach it.
 apiVersion: v1
 kind: Service
 metadata:
-  name: knowledge-db
-  namespace: knowledge
+  name: assessment-db
+  namespace: assessment
 spec:
   selector:
-    app: knowledge-db
+    app: assessment-db
   ports:
     - port: 5432
       targetPort: 5432

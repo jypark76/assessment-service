@@ -1,21 +1,21 @@
-# In plain English: tells the cluster to run one copy of the knowledge service
+# In plain English: tells the cluster to run one copy of the assessment service
 # and to keep it running. If it crashes, Kubernetes starts a new one.
 # This is the shared "base": it is the same in every environment. The settings
 # that differ (the database address, the image version) live in the overlays.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: knowledge-service
-  namespace: knowledge
+  name: assessment-service
+  namespace: assessment
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: knowledge-service
+      app: assessment-service
   template:
     metadata:
       labels:
-        app: knowledge-service
+        app: assessment-service
     spec:
       # Safety rules for the pod: never run as the all-powerful root user.
       # 1000 is the number of "appuser" inside our image.
@@ -24,12 +24,12 @@ spec:
         runAsUser: 1000
         runAsGroup: 1000
       containers:
-        - name: knowledge-service
+        - name: assessment-service
           # The image NAME only. The version tag is added by each overlay (see
           # the "images" part of its kustomization.yaml), never "latest":
           # Kubernetes tries to download "latest" images, and the local one only
           # exists on this laptop. On AWS the overlay swaps in the ECR address.
-          image: knowledge-service
+          image: assessment-service
           # Use the local copy if there is one; do not try to download.
           imagePullPolicy: IfNotPresent
           ports:
@@ -38,13 +38,13 @@ spec:
           # ConfigMap, which each overlay supplies under this same name.
           envFrom:
             - configMapRef:
-                name: knowledge-service-config
+                name: assessment-service-config
           env:
             # The password comes from the Secret you created, not from any file.
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: knowledge-db
+                  name: assessment-db
                   key: app-password
           # "Are you alive?" If this keeps failing, Kubernetes restarts the pod.
           livenessProbe:

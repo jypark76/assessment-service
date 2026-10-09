@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# In plain English: this script deploys the knowledge service to whichever
+# In plain English: this script deploys the assessment service to whichever
 # Kubernetes cluster your computer is currently pointed at, using the right
 # settings for that cluster. It works out the environment by itself:
 #   - the Docker Desktop cluster on your laptop  -> the "local" settings
@@ -58,24 +58,24 @@ if [ "$overlay" = "aws" ]; then
   [ "$answer" = "yes" ] || { echo "Cancelled."; exit 1; }
 fi
 
-# Make sure the "knowledge" room exists, because the Secret has to live in it.
+# Make sure the "assessment" room exists, because the Secret has to live in it.
 kubectl apply -f "$here/base/namespace.yaml"
 
 # The passwords must already be in the cluster. We never create them here.
 # "--ignore-not-found" means a missing Secret gives an empty answer, while any
 # other problem (no connection, expired login, no permission) shows its real
 # error and stops the script.
-secret="$(kubectl get secret knowledge-db -n knowledge --ignore-not-found -o name)"
+secret="$(kubectl get secret assessment-db -n assessment --ignore-not-found -o name)"
 if [ -z "$secret" ]; then
-  echo "The Secret 'knowledge-db' does not exist yet. Create it first, with your own passwords:" >&2
-  echo "  kubectl create secret generic knowledge-db -n knowledge --from-literal=postgres-password=ADMIN_PASSWORD --from-literal=app-password=APP_PASSWORD" >&2
+  echo "The Secret 'assessment-db' does not exist yet. Create it first, with your own passwords:" >&2
+  echo "  kubectl create secret generic assessment-db -n assessment --from-literal=postgres-password=ADMIN_PASSWORD --from-literal=app-password=APP_PASSWORD" >&2
   exit 1
 fi
 
 # Laptop only: hand the table-setup file (db/init.sql) to the database pod. It
 # contains no secrets. The pod runs it by itself on its first start.
 if [ "$overlay" = "local" ]; then
-  kubectl create configmap knowledge-db-init -n knowledge \
+  kubectl create configmap assessment-db-init -n assessment \
     --from-file=01-init.sql="$here/../db/init.sql" \
     --dry-run=client -o yaml | kubectl apply -f -
 fi

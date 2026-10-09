@@ -19,15 +19,15 @@ ROOT = Path(__file__).resolve().parent.parent
 OVERLAY = ROOT / "k8s" / "overlays" / "local"
 DEPLOY_SCRIPT = ROOT / "k8s" / "deploy.sh"
 
-NAMESPACE = "knowledge"
+NAMESPACE = "assessment"
 
 # Kinds that do not live inside a namespace.
 CLUSTER_WIDE = {"Namespace"}
 
 # Things the pods point at that are NOT in the rendered files on purpose:
-# "knowledge-db-init" is made by deploy.sh from db/init.sql, and the Secret
-# "knowledge-db" is created by hand and never stored in the repo.
-MADE_OUTSIDE = {("ConfigMap", "knowledge-db-init"), ("Secret", "knowledge-db")}
+# "assessment-db-init" is made by deploy.sh from db/init.sql, and the Secret
+# "assessment-db" is created by hand and never stored in the repo.
+MADE_OUTSIDE = {("ConfigMap", "assessment-db-init"), ("Secret", "assessment-db")}
 
 
 # In plain English: builds the final Kubernetes files for the laptop settings and
@@ -127,7 +127,7 @@ def find_problems(docs):
                 problems.append(f"{label}: points at {reference[0]} '{reference[1]}', which does not exist")
 
         # Rule 4: the service pod itself is locked down.
-        if name == "knowledge-service":
+        if name == "assessment-service":
             pod = doc["spec"]["template"]["spec"]
             pod_security = pod.get("securityContext", {})
             if pod_security.get("runAsNonRoot") is not True:
@@ -166,9 +166,9 @@ def real_docs():
 # checks the render really produced our objects, so an empty result can never pass.
 def test_real_overlay_breaks_no_rules(real_docs):
     kinds = {(doc["kind"], doc["metadata"]["name"]) for doc in real_docs}
-    assert ("Deployment", "knowledge-service") in kinds
-    assert ("Deployment", "knowledge-db") in kinds
-    assert ("NetworkPolicy", "knowledge-db-allow-service-only") in kinds
+    assert ("Deployment", "assessment-service") in kinds
+    assert ("Deployment", "assessment-db") in kinds
+    assert ("NetworkPolicy", "assessment-db-allow-service-only") in kinds
     assert find_problems(real_docs) == []
 
 
@@ -191,29 +191,29 @@ def good_docs():
         {
             "kind": "ConfigMap",
             "metadata": {"name": "settings", "namespace": NAMESPACE},
-            "data": {"DB_HOST": "knowledge-db"},
+            "data": {"DB_HOST": "assessment-db"},
         },
         {
             "kind": "Service",
-            "metadata": {"name": "knowledge-service", "namespace": NAMESPACE},
+            "metadata": {"name": "assessment-service", "namespace": NAMESPACE},
             "spec": {"ports": [{"port": 8000}]},
         },
         {
             "kind": "Deployment",
-            "metadata": {"name": "knowledge-service", "namespace": NAMESPACE},
+            "metadata": {"name": "assessment-service", "namespace": NAMESPACE},
             "spec": {
                 "template": {
                     "spec": {
                         "securityContext": {"runAsNonRoot": True, "runAsUser": 1000},
                         "containers": [
                             {
-                                "name": "knowledge-service",
-                                "image": "knowledge-service:0.4.0",
+                                "name": "assessment-service",
+                                "image": "assessment-service:0.4.0",
                                 "envFrom": [{"configMapRef": {"name": "settings"}}],
                                 "env": [
                                     {
                                         "name": "DB_PASSWORD",
-                                        "valueFrom": {"secretKeyRef": {"name": "knowledge-db", "key": "app-password"}},
+                                        "valueFrom": {"secretKeyRef": {"name": "assessment-db", "key": "app-password"}},
                                     }
                                 ],
                                 "resources": {"limits": {"memory": "1Gi"}},
@@ -254,13 +254,13 @@ def test_catches_a_secret_in_the_repo():
 
 def test_catches_the_latest_tag():
     docs = good_docs()
-    containers_of(deployment_of(docs))[0]["image"] = "knowledge-service:latest"
+    containers_of(deployment_of(docs))[0]["image"] = "assessment-service:latest"
     assert any("latest" in problem for problem in find_problems(docs))
 
 
 def test_catches_a_missing_tag():
     docs = good_docs()
-    containers_of(deployment_of(docs))[0]["image"] = "knowledge-service"
+    containers_of(deployment_of(docs))[0]["image"] = "assessment-service"
     assert any("no version tag" in problem for problem in find_problems(docs))
 
 
@@ -311,5 +311,5 @@ def test_catches_privilege_escalation_and_kept_capabilities():
 # Secret) must NOT be reported, or the checker would cry wolf on a healthy setup.
 def test_allows_the_things_made_outside_on_purpose():
     docs = good_docs()
-    assert ("Secret", "knowledge-db") in references_of(deployment_of(docs))
+    assert ("Secret", "assessment-db") in references_of(deployment_of(docs))
     assert find_problems(docs) == []

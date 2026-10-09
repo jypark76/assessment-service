@@ -4,12 +4,12 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: knowledge-service-config
-  namespace: knowledge
+  name: assessment-service-config
+  namespace: assessment
 data:
   # The internal address of the database inside the cluster.
-  DB_HOST: knowledge-db
+  DB_HOST: assessment-db
   DB_PORT: "5432"
-  DB_NAME: knowledge
+  DB_NAME: assessment
   # The limited login that can only read and add examples.
-  DB_USER: knowledge_app
+  DB_USER: assessment_app

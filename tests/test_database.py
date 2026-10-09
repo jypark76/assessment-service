@@ -7,7 +7,7 @@
 # themselves. Every test adds rows with a brand new random assignment ID and
 # leaves them behind. That is fine for a throwaway database and a disaster for a
 # real one. So the tests refuse to run unless the database is named
-# "knowledge_test". The pipeline creates a fresh one for every run and throws it
+# "assessment_test". The pipeline creates a fresh one for every run and throws it
 # away afterwards. To run these on your own computer, start a temporary Postgres
 # container yourself (see the README) and point the DB_* settings at it.
 import os
@@ -30,15 +30,15 @@ client = TestClient(app)
 # settings at all, the tests quietly skip, so a normal run on your laptop still
 # works. In the pipeline REQUIRE_DB=1 is set, and then a missing database is a
 # failure, because a test that silently skips proves nothing. If the settings
-# point at any database other than "knowledge_test", it refuses to run.
+# point at any database other than "assessment_test", it refuses to run.
 @pytest.fixture(autouse=True)
 def require_test_database():
     if not os.environ.get("DB_HOST"):
         if os.environ.get("REQUIRE_DB") == "1":
             pytest.fail("REQUIRE_DB is set but no database settings were given")
         pytest.skip("no test database configured")
-    if os.environ.get("DB_NAME") != "knowledge_test":
-        pytest.fail("refusing to run: DB_NAME must be 'knowledge_test', never a real database")
+    if os.environ.get("DB_NAME") != "assessment_test":
+        pytest.fail("refusing to run: DB_NAME must be 'assessment_test', never a real database")
 
 
 # In plain English: saves one example through the real web address and returns
@@ -152,7 +152,7 @@ def test_service_login_cannot_update_or_delete():
         count = connection.execute(
             "SELECT count(*) FROM examples WHERE assignment_id = %s", (assignment_uuid,)
         ).fetchone()[0]
-    assert who == "knowledge_app"
+    assert who == "assessment_app"
     assert count == 1
 
     for statement in (

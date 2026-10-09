@@ -1,4 +1,4 @@
-# In plain English: this is the front door of the knowledge service. It answers
+# In plain English: this is the front door of the assessment service. It answers
 # "are you alive?" and "are you ready to work?", and it lets callers save a
 # graded example, list the saved ones and find the most similar ones.
 from uuid import UUID
@@ -19,7 +19,7 @@ from app.examples import (
 
 # Create the web application. The title and version show up on the automatic
 # documentation page FastAPI builds at /docs.
-app = FastAPI(title="Knowledge service", version="0.5.1")
+app = FastAPI(title="Assessment service", version="0.5.1")
 
 
 # In plain English: the kinds of error whose built-in wording is safe, because it
