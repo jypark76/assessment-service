@@ -113,6 +113,43 @@ def create_submission(new):
     return stored, False
 
 
+# In plain English: lists the submissions whose LATEST version has the given status,
+# oldest first, so it works as a queue. A submission counts under a status only while
+# that status is its newest version, so a graded submission leaves the "graded" list the
+# moment it is approved or rejected. It can be narrowed to one assignment. Each item has
+# the IDs, the version, the grade and the time, but not the student's name or essay,
+# which are read one submission at a time.
+def list_submissions(status: str, assignment_id, limit: int):
+    conditions = [
+        "s.status = %s",
+        "NOT EXISTS (SELECT 1 FROM submissions newer "
+        "WHERE newer.submission_id = s.submission_id AND newer.version > s.version)",
+    ]
+    params = [status]
+    if assignment_id is not None:
+        conditions.append("s.assignment_id = %s")
+        params.append(assignment_id)
+    params.append(limit)
+    with connect() as connection:
+        rows = connection.execute(
+            "SELECT s.submission_id, s.assignment_id, s.version, s.status, s.ai_grade, "
+            "s.created_at FROM submissions s WHERE " + " AND ".join(conditions) +
+            " ORDER BY s.created_at, s.submission_id LIMIT %s",
+            params,
+        ).fetchall()
+    return [
+        {
+            "submission_id": submission_id,
+            "assignment_id": assignment_id,
+            "version": version,
+            "status": status,
+            "ai_grade": ai_grade,
+            "created_at": created_at,
+        }
+        for submission_id, assignment_id, version, status, ai_grade, created_at in rows
+    ]
+
+
 # In plain English: reads a submission with its full history, oldest version first. The
 # student's work is shown once at the top, because every version repeats it. Returns
 # None if there is no submission with that ID.

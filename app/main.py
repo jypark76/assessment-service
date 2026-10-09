@@ -1,8 +1,9 @@
 # In plain English: this is the front door of the assessment service. It answers two
 # questions, "are you alive?" and "are you ready to work?", and it offers the
 # assignment routes (create one, read one, list the newest) and the submission routes
-# (send one in, read one back with its history), plus the route that records a grade.
-# The instructor's review comes in a later step.
+# (send one in, read one back with its history, list them by status), the route that
+# records a grade, and the route that records an instructor's review.
+from typing import Literal
 from uuid import UUID
 
 from fastapi import FastAPI, Query, Request
@@ -25,17 +26,19 @@ from app.grades import (
     SubmissionNotFound,
     record_grade,
 )
+from app.reviews import NewReview, NotWaitingForReview, record_review
 from app.submissions import (
     AssignmentNotFound,
     IdUsedForOtherContent,
     NewSubmission,
     create_submission,
     get_submission,
+    list_submissions,
 )
 
 # Create the web application. The title and version show up on the automatic
 # documentation page FastAPI builds at /docs.
-app = FastAPI(title="Assessment service", version="0.4.0")
+app = FastAPI(title="Assessment service", version="0.5.0")
 
 
 # In plain English: the kinds of error whose built-in wording is safe, because it
@@ -158,6 +161,19 @@ def add_submission(body: NewSubmission):
     return JSONResponse(status_code=201 if created else 200, content=jsonable_encoder(saved))
 
 
+# In plain English: lists the submissions whose newest version has the asked-for status,
+# oldest first, so "graded" is the queue of grades waiting for an instructor. The caller
+# can narrow it to one assignment and ask for 1 to 100 items (50 if it does not say).
+# The status is required. The list shows no student names or essays.
+@app.get("/submissions")
+def submission_list(
+    status: Literal["submitted", "graded", "rejected", "approved"],
+    assignment_id: UUID | None = None,
+    limit: int = Query(50, ge=1, le=100),
+):
+    return list_submissions(status, assignment_id, limit)
+
+
 # In plain English: reads a submission with its history, one entry per version. An ID
 # that does not exist answers 404, and the reply does not repeat the ID.
 @app.get("/submissions/{submission_id}")
@@ -189,6 +205,32 @@ def add_grade(submission_id: UUID, body: NewGrade):
         return JSONResponse(
             status_code=409,
             content={"problem": "This submission is not waiting for a grade"},
+        )
+    return JSONResponse(status_code=201 if created else 200, content=jsonable_encoder(saved))
+
+
+# In plain English: records an instructor's review as the next version of a submission,
+# either approved or rejected. The reviewer says which version it reviewed
+# ("based_on_version"). A new review answers 201. The same review sent again answers 200
+# with the saved review and adds nothing. A submission that has moved on answers 409, and
+# so does one that is not waiting for review (no grade yet, already rejected, or already
+# approved). An unknown submission answers 404. The replies use fixed wording and never
+# repeat what the caller sent.
+@app.post("/submissions/{submission_id}/reviews")
+def add_review(submission_id: UUID, body: NewReview):
+    try:
+        saved, created = record_review(submission_id, body)
+    except SubmissionNotFound:
+        return JSONResponse(status_code=404, content={"problem": "Submission not found"})
+    except SubmissionMovedOn:
+        return JSONResponse(
+            status_code=409,
+            content={"problem": "This submission has changed since that version"},
+        )
+    except NotWaitingForReview:
+        return JSONResponse(
+            status_code=409,
+            content={"problem": "This submission is not waiting for review"},
         )
     return JSONResponse(status_code=201 if created else 200, content=jsonable_encoder(saved))
 
