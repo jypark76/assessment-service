@@ -1,7 +1,7 @@
-# In plain English: this is the recipe that packs the knowledge service into one
+# In plain English: this is the recipe that packs the assessment service into one
 # sealed box (a Docker image) that runs the same way on any computer.
-# Build it from the repo folder:  docker build -t knowledge-service .
-# Run it:                         docker run --rm -p 8000:8000 knowledge-service
+# Build it from the repo folder:  docker build -t assessment-service .
+# Run it:                         docker run --rm -p 8000:8000 assessment-service
 
 # Start from a small, ready-made Python system.
 FROM python:3.12-slim

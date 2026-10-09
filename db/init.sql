@@ -1,4 +1,4 @@
--- In plain English: this file sets up the knowledge service's own database.
+-- In plain English: this file sets up the assessment service's own database.
 -- It runs once, when the database is first created. It makes the table that
 -- stores approved grading examples, makes it fast to search, and creates a
 -- limited login the service uses so it can read and add examples but never
@@ -48,8 +48,8 @@ CREATE INDEX IF NOT EXISTS examples_embedding_idx
 -- file.
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'knowledge_app') THEN
-    CREATE ROLE knowledge_app LOGIN;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'assessment_app') THEN
+    CREATE ROLE assessment_app LOGIN;
   END IF;
 END
 $$;
@@ -57,5 +57,5 @@ $$;
 -- What that login is allowed to do: look at the table and add rows. It is NOT
 -- given UPDATE or DELETE, so approved examples can never be edited or removed
 -- through the service, even if the service has a bug.
-GRANT USAGE ON SCHEMA public TO knowledge_app;
-GRANT SELECT, INSERT ON examples TO knowledge_app;
+GRANT USAGE ON SCHEMA public TO assessment_app;
+GRANT SELECT, INSERT ON examples TO assessment_app;
