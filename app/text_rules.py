@@ -16,3 +16,13 @@ def must_be_storable_text(value):
     except UnicodeEncodeError:
         raise ValueError("Text must be valid Unicode") from None
     return value
+
+
+# In plain English: first checks the text can be stored at all, then trims the spaces at
+# either end and checks the length. The wording of each refusal is fixed and never quotes
+# what the caller sent.
+def trimmed(value, longest):
+    value = must_be_storable_text(value).strip()
+    if not 1 <= len(value) <= longest:
+        raise ValueError(f"Must be 1 to {longest} characters after trimming spaces")
+    return value

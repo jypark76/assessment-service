@@ -4,8 +4,8 @@ The record keeper for an AI assessment grader. It is one small service in a
 larger set of microservices, built in Python and meant to run on Kubernetes.
 
 **Status: early work in progress.** The two database tables exist and are tested,
-and the assignment routes work. The submission routes, grading and review are not
-written yet.
+and the assignment and submission routes work. Grading and review are not written
+yet, so a submission has only its first version, the student's work.
 
 ## What it will do
 
@@ -40,11 +40,20 @@ never change or delete them.
 | `POST /assignments` | Create an assignment (instructor, title, rubric). Answers 201, or 409 if the title is in use |
 | `GET /assignments` | List the newest assignments, without rubrics (`limit` 1 to 100, default 50) |
 | `GET /assignments/{id}` | Read one assignment with its rubric, or 404 |
+| `POST /submissions` | Send a student's work in as version 1. Answers 201, 200 for a retry, 404 for an unknown assignment, or 409 if the ID is used for different content |
+| `GET /submissions/{id}` | Read a submission with its history, one entry per version, or 404 |
 
-There is no way to change or delete an assignment through the API. The submission
-routes come next. Bad input is refused with a 422 that names the field and the
-reason but never repeats what the caller sent, not even the name of a field the
-caller invented.
+There is no way to change or delete an assignment or a submission through the API.
+
+The caller chooses the `submission_id`, and it doubles as the request ID. Sending the
+same request again (a double click, or a retry after a timeout) returns the original
+with a 200 and creates nothing new. The same ID with different content is refused with
+a 409 and the stored submission is left as it was. Different IDs are always different
+submissions, even for the same student and the same essay.
+
+Bad input is refused with a 422 that names the field and the reason but never repeats
+what the caller sent, not even the name of a field the caller invented. Text with a
+null character, or text that cannot be written as UTF-8, is refused the same way.
 
 ## Tests
 
@@ -66,8 +75,8 @@ checks them against our rules (namespace, no Secret, fixed image tags, a locked-
 service pod and more). It needs `kubectl` and is skipped without it. Its self-tests
 feed it deliberately broken files, so it cannot pass by never complaining.
 
-`tests/test_database.py`, `tests/test_tables.py` and `tests/test_assignments.py` need a
-real database and are skipped when none is configured. In the pipeline they run
+`tests/test_database.py`, `tests/test_tables.py`, `tests/test_assignments.py` and
+`tests/test_submissions.py` need a real database and are skipped when none is configured. In the pipeline they run
 against a throwaway Postgres that is built from `db/init.sql` and the first-start
 password script, then destroyed. They refuse to run unless the database is named
 `assessment_test`. The service's login cannot delete rows, so a database used for
@@ -86,7 +95,7 @@ docker run -d --name test-db \
 
 # wait about 20 seconds for the database to finish setting itself up, then:
 DB_HOST=localhost DB_NAME=assessment_test DB_USER=assessment_app DB_PASSWORD=app \
-  .venv/Scripts/python -m pytest -v tests/test_database.py tests/test_tables.py tests/test_assignments.py
+  .venv/Scripts/python -m pytest -v tests/test_database.py tests/test_tables.py tests/test_assignments.py tests/test_submissions.py
 
 docker rm -f test-db
 ```
@@ -125,8 +134,9 @@ On AWS the database is RDS, so the Postgres pod is not used there.
 ## Known limits
 
 - The service has no authentication. It does not check who is calling, so anyone
-  who can reach it can create and read assignments, and later read student names.
-  Who may see what is decided when the frontend arrives.
+  who can reach it can create and read assignments and can read any submission,
+  including the student's name and essay, if they know its ID. Who may see what is
+  decided when the frontend arrives. Student names are stored only in this service.
 - Reachability is limited by the network only: the service is `ClusterIP`, so nothing
   outside the cluster can reach it, but there is no rule yet on which pods inside the
   cluster may call it. That rule is planned for when the real callers exist.
