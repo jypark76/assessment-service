@@ -1,10 +1,11 @@
 # In plain English: this is the front door of the assessment service. It answers two
 # questions, "are you alive?" and "are you ready to work?", and it offers the
-# assignment routes (create one, read one, list the newest). Submissions, grades and
-# reviews come in later steps.
+# assignment routes (create one, read one, list the newest) and the submission routes
+# (send one in, read one back with its history). Grades and reviews come in later steps.
 from uuid import UUID
 
 from fastapi import FastAPI, Query, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -16,10 +17,17 @@ from app.assignments import (
     list_assignments,
 )
 from app.db import database_is_ready
+from app.submissions import (
+    AssignmentNotFound,
+    IdUsedForOtherContent,
+    NewSubmission,
+    create_submission,
+    get_submission,
+)
 
 # Create the web application. The title and version show up on the automatic
 # documentation page FastAPI builds at /docs.
-app = FastAPI(title="Assessment service", version="0.2.0")
+app = FastAPI(title="Assessment service", version="0.3.0")
 
 
 # In plain English: the kinds of error whose built-in wording is safe, because it
@@ -120,6 +128,35 @@ def assignment_detail(assignment_id: UUID):
     found = get_assignment(assignment_id)
     if found is None:
         return JSONResponse(status_code=404, content={"problem": "Assignment not found"})
+    return found
+
+
+# In plain English: sends a student's work in as version 1. A new submission answers
+# 201. The same request sent again (same ID, same content) answers 200 with the
+# original and creates nothing. An ID already used for different content answers 409,
+# and an assignment that does not exist answers 404. The replies use fixed wording and
+# never repeat what the caller sent.
+@app.post("/submissions")
+def add_submission(body: NewSubmission):
+    try:
+        saved, created = create_submission(body)
+    except AssignmentNotFound:
+        return JSONResponse(status_code=404, content={"problem": "Assignment not found"})
+    except IdUsedForOtherContent:
+        return JSONResponse(
+            status_code=409,
+            content={"problem": "This submission ID is already used for different content"},
+        )
+    return JSONResponse(status_code=201 if created else 200, content=jsonable_encoder(saved))
+
+
+# In plain English: reads a submission with its history, one entry per version. An ID
+# that does not exist answers 404, and the reply does not repeat the ID.
+@app.get("/submissions/{submission_id}")
+def submission_detail(submission_id: UUID):
+    found = get_submission(submission_id)
+    if found is None:
+        return JSONResponse(status_code=404, content={"problem": "Submission not found"})
     return found
 
 

@@ -16,3 +16,24 @@ def must_be_storable_text(value):
     except UnicodeEncodeError:
         raise ValueError("Text must be valid Unicode") from None
     return value
+
+
+# In plain English: for long free text that is stored exactly as written, such as a rubric
+# or an essay. Checks the text can be stored at all, is not blank, and is not longer than
+# the limit. The text is returned unchanged, spaces and all. The wording of each refusal
+# is fixed and never quotes what the caller sent.
+def long_text(value, longest):
+    must_be_storable_text(value)
+    if not value.strip() or len(value) > longest:
+        raise ValueError(f"Must be 1 to {longest} characters and not blank")
+    return value
+
+
+# In plain English: first checks the text can be stored at all, then trims the spaces at
+# either end and checks the length. The wording of each refusal is fixed and never quotes
+# what the caller sent.
+def trimmed(value, longest):
+    value = must_be_storable_text(value).strip()
+    if not 1 <= len(value) <= longest:
+        raise ValueError(f"Must be 1 to {longest} characters after trimming spaces")
+    return value
