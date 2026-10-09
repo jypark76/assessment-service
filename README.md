@@ -1,43 +1,43 @@
 # Assessment service
 
-The memory of past grading for an AI assessment grader. It is one small
-service in a larger set of microservices, built in Python and meant to run on
-Kubernetes.
+The record keeper for an AI assessment grader. It is one small service in a
+larger set of microservices, built in Python and meant to run on Kubernetes.
 
-**Status: work in progress.** The API, the tests and the local Kubernetes setup
-exist. The AWS setup (RDS, ECR, EKS) is not written yet.
+**Status: early work in progress.** A runnable skeleton exists: the health
+checks, an empty database with its limited login, the tests and pipeline, and the
+Kubernetes files. The tables and the real routes are not written yet.
 
-## What it does
+## What it will do
 
-1. **Stores approved examples.** After an instructor approves a grade, the
-   example (student work, grade and reasoning) is saved here along with an
-   embedding, a list of 384 numbers describing what the text is about.
-2. **Finds similar examples.** Given a new piece of student work, it returns
-   the past examples closest in meaning, so grading stays consistent.
+It is the system of record for assignments, submissions, grades and instructor
+reviews. It contains no AI. The AI lives in the grader workers, which come later.
 
-## What it owns
+- **Assignments:** a title (unique across the system) and a rubric.
+- **Submissions:** the student's work, kept as a series of **versions**. Every
+  grade, rejection and approval is a new row with the next version number, so
+  nothing is ever edited or deleted and the full grading history survives.
 
-Its own Postgres database with the pgvector extension and a single
-`examples` table. No other service reads that database directly. Other
+## What it will own
+
+Its own Postgres database with two tables, `assignments` and a versioned
+`submissions` table. No other service reads that database directly. Other
 services ask this service through its API.
 
-The setup lives in [`db/init.sql`](db/init.sql). The table holds an example ID,
-an assignment ID (a plain reference to another service), the student work, the
-grade, the reasoning, the embedding and a timestamp. It stores no student
-names.
+Today the database holds no tables. The setup in [`db/init.sql`](db/init.sql)
+only creates the service's limited login, which can connect but cannot create
+anything. The permissions for each table will be granted together with the table:
+read and add rows, never change or delete them.
 
 ## API
 
 | Call | What it does |
 |---|---|
-| `POST /examples` | Save an approved example and compute its embedding |
-| `GET /examples?assignment_id=...` | List the examples for one assignment (newest first, up to 100) |
-| `POST /examples/search` | Return the examples most similar in meaning to some text. It searches inside the assignment. If the assignment has no examples at all it returns nothing, unless the caller sets `fallback_to_all` to `true`, which borrows similar examples from every assignment. The flag is off by default, which protects against typos and accidents. It is not a security control, because it travels in the same request and the service has no authentication. Each result carries its `assignment_id` and a `same_assignment` flag, so the caller can tell borrowed examples from the assignment's own |
 | `GET /health` | Report whether the service is alive |
 | `GET /ready` | Report whether the service can reach its database |
 
-Bad input is refused with a 422 that names the field and the reason but never
-repeats what the caller sent.
+The assignment and submission routes come with the tables. Bad input is refused
+with a 422 that names the field and the reason but never repeats what the caller
+sent, not even the name of a field the caller invented.
 
 ## Tests
 
@@ -50,9 +50,9 @@ python -m venv .venv
 The same tests run on every pull request, and the `main` branch rules require
 them to pass before a merge.
 
-The pipeline also builds the Docker image and starts it with the network off, then checks
-`/health`, that `/ready` fails safely with no database, that the model is inside the image,
-that it runs as user 1000 and that only the code, the model and the list of libraries are in `/app`.
+The pipeline also builds the Docker image and starts it with the network off, then
+checks `/health`, that `/ready` fails safely with no database, that it runs as user
+1000 and that only the code and the list of libraries are in `/app`.
 
 `tests/test_k8s_manifests.py` builds the Kubernetes files for the laptop settings and
 checks them against our rules (namespace, no Secret, fixed image tags, a locked-down
@@ -61,9 +61,8 @@ feed it deliberately broken files, so it cannot pass by never complaining.
 
 `tests/test_database.py` needs a real database and is skipped when none is
 configured. In the pipeline it runs against a throwaway Postgres that is built
-from `db/init.sql` and the first-start password script, then destroyed. The
-service login cannot delete, so these tests leave rows behind and refuse to run
-unless the database is named `assessment_test`. To run them yourself, start a
+from `db/init.sql` and the first-start password script, then destroyed. It refuses
+to run unless the database is named `assessment_test`. To run it yourself, start a
 temporary container (use any passwords you like) and point the settings at it:
 
 ```
@@ -73,7 +72,7 @@ docker run -d --name test-db \
   -e POSTGRES_PASSWORD=admin -e POSTGRES_DB=assessment_test -e APP_PASSWORD=app \
   -v "$PWD/db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro" \
   -v "$PWD/k8s/overlays/local/set-app-password.sh:/docker-entrypoint-initdb.d/02-set-app-password.sh:ro" \
-  -p 5432:5432 pgvector/pgvector:0.8.7-pg17
+  -p 5432:5432 postgres:17
 
 # wait about 20 seconds for the database to finish setting itself up, then:
 DB_HOST=localhost DB_NAME=assessment_test DB_USER=assessment_app DB_PASSWORD=app \
@@ -106,10 +105,6 @@ kubectl delete -n assessment deployment/assessment-db pvc/assessment-db-data
 bash k8s/deploy.sh
 ```
 
-The embedding model loads on the first save or search call, not at startup, so
-the first call is slower. If it is ever preloaded at startup, add a
-`startupProbe` to the Deployment so a slow start is not mistaken for a crash.
-
 The database pod has a NetworkPolicy (`k8s/overlays/local/networkpolicy.yaml`) that
 allows only the service pod to connect. It is written but not verified: Docker
 Desktop's built-in cluster does not enforce NetworkPolicy, so a wrong pod still gets
@@ -119,11 +114,8 @@ On AWS the database is RDS, so the Postgres pod is not used there.
 
 ## Known limits
 
-- The `fallback_to_all` flag guards against typos and accidents, not against a caller who wants the data. It travels in the same unauthenticated request, so any caller that can reach the service can set it with any assignment ID and read other assignments' examples. Real protection needs authentication, or the caller checking that the assignment exists. The service is internal-only for now.
-- Search uses pgvector's HNSW index with iterative scan switched on, which stops
-  after 20000 scanned rows (`hnsw.max_scan_tuples`). A small assignment hidden
-  behind tens of thousands of closer examples from other assignments could still
-  return too few results. Nothing near that size exists today.
+- The service has no authentication yet and is internal-only. Who may see what
+  is decided when the frontend arrives.
 - The NetworkPolicy is written but not verified, because Docker Desktop's
   built-in cluster does not enforce it.
 
@@ -131,7 +123,7 @@ On AWS the database is RDS, so the Postgres pod is not used there.
 
 - This repo is public. It never contains passwords, API keys or Kubernetes
   Secret files, not even templates.
-- The service's database login can read and add examples but cannot update or
-  delete them.
+- The service's database login can connect but cannot create tables. Once the
+  tables exist it will be able to read and add rows but not change or delete them.
 - The database passwords live only in a Kubernetes Secret that is created by
   hand with a command. They are never written into any file.

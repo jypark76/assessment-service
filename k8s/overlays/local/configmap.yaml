@@ -11,5 +11,5 @@ data:
   DB_HOST: assessment-db
   DB_PORT: "5432"
   DB_NAME: assessment
-  # The limited login that can only read and add examples.
+  # The limited login the service connects with.
   DB_USER: assessment_app

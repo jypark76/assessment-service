@@ -22,13 +22,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Never run the service as the all-powerful root user inside the box.
 RUN useradd --create-home appuser
 
-# Save the AI model's files inside the image while it is being built, so the
-# service never has to download them (about 130 MB) when it starts. The model
-# lives in /app/model_cache, which the service's own user owns.
-ENV FASTEMBED_CACHE_PATH=/app/model_cache
-RUN mkdir /app/model_cache && chown appuser /app/model_cache
+# From here on, everything runs as that limited user.
 USER appuser
-RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')"
 
 # Copy in the service code.
 COPY --chown=appuser app/ ./app/

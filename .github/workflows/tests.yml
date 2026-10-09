@@ -16,9 +16,6 @@ permissions:
 jobs:
   tests:
     runs-on: ubuntu-latest
-    env:
-      # Where the AI model files are saved, so they can be reused between runs.
-      FASTEMBED_CACHE_PATH: ${{ github.workspace }}/.model_cache
     steps:
       - uses: actions/checkout@v4
 
@@ -28,12 +25,6 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements-dev.txt
-
-      # Remember the downloaded AI model so most runs skip the 130 MB download.
-      - uses: actions/cache@v4
-        with:
-          path: .model_cache
-          key: fastembed-bge-small-en-v1.5
 
       - run: pip install -r requirements-dev.txt
 
@@ -47,8 +38,6 @@ jobs:
   # stored anywhere. When the job ends, the database and its data are destroyed.
   database-tests:
     runs-on: ubuntu-latest
-    env:
-      FASTEMBED_CACHE_PATH: ${{ github.workspace }}/.model_cache
     steps:
       - uses: actions/checkout@v4
 
@@ -57,11 +46,6 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements-dev.txt
-
-      - uses: actions/cache@v4
-        with:
-          path: .model_cache
-          key: fastembed-bge-small-en-v1.5
 
       # Make two random passwords for this run only, hide them from the logs, and
       # hand them to the later steps.
@@ -87,7 +71,7 @@ jobs:
             -v "$PWD/db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro" \
             -v "$PWD/k8s/overlays/local/set-app-password.sh:/docker-entrypoint-initdb.d/02-set-app-password.sh:ro" \
             -p 5432:5432 \
-            pgvector/pgvector:0.8.7-pg17
+            postgres:17
 
       # Wait until the first-start scripts have finished AND the real server is
       # answering over the network. (A check over the local socket can say "ready"
@@ -153,9 +137,8 @@ jobs:
   # In plain English: the fourth job. It builds the real Docker image, the same one
   # the cluster runs, and starts it with the network switched off and no database.
   # Then it checks the things the other jobs take on trust: the service answers
-  # /health, /ready fails safely, the AI model is really inside the image (it cannot
-  # download anything with the network off), the service runs as user 1000 and not
-  # as root, and nothing that should stay out of the image got in.
+  # /health, /ready fails safely, the service runs as user 1000 and not as root, and
+  # nothing that should stay out of the image got in.
   image-build:
     runs-on: ubuntu-latest
     steps:
@@ -164,8 +147,8 @@ jobs:
       - name: Build the image
         run: docker build -t assessment-service:ci .
 
-      # --network none means the container cannot reach the internet. If the model
-      # was not saved into the image during the build, the model check below fails.
+      # --network none means the container cannot reach the internet, so the checks
+      # below also prove the service needs nothing from outside to start.
       - name: Start it with the network off
         run: docker run -d --name image-test --network none assessment-service:ci
 
@@ -207,10 +190,6 @@ jobs:
               raise SystemExit("expected a 503 from /ready")
           PY
 
-      - name: Check the model is inside the image
-        run: |
-          docker exec image-test python -c "from app.embeddings import embed_text; numbers = embed_text('hello world'); assert len(numbers) == 384, len(numbers)"
-
       - name: Check it runs as user 1000
         run: |
           user_id="$(docker exec image-test id -u)"
@@ -219,13 +198,13 @@ jobs:
             exit 1
           fi
 
-      # Only the code, the model and the list of libraries (the Dockerfile copies it in
-      # to install them) should be in /app. The tests, the Kubernetes files and any
+      # Only the code and the list of libraries (the Dockerfile copies it in to
+      # install them) should be in /app. The tests, the Kubernetes files and any
       # notes must stay out, and so must anything that looks like a secret.
       - name: Check only the expected files are inside
         run: |
           contents="$(docker exec image-test ls -A /app | sort | tr '\n' ' ')"
-          if [ "$contents" != "app model_cache requirements.txt " ]; then
+          if [ "$contents" != "app requirements.txt " ]; then
             echo "Unexpected files in /app: $contents" >&2
             exit 1
           fi

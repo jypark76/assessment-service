@@ -46,8 +46,8 @@ spec:
     spec:
       containers:
         - name: postgres
-          # Same database image you used with Docker: Postgres plus pgvector.
-          image: pgvector/pgvector:0.8.7-pg17
+          # Plain Postgres. This service needs no add-ons.
+          image: postgres:17
           ports:
             - containerPort: 5432
           env:
