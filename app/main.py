@@ -1,7 +1,8 @@
 # In plain English: this is the front door of the assessment service. It answers two
 # questions, "are you alive?" and "are you ready to work?", and it offers the
 # assignment routes (create one, read one, list the newest) and the submission routes
-# (send one in, read one back with its history). Grades and reviews come in later steps.
+# (send one in, read one back with its history), plus the route that records a grade.
+# The instructor's review comes in a later step.
 from uuid import UUID
 
 from fastapi import FastAPI, Query, Request
@@ -17,6 +18,13 @@ from app.assignments import (
     list_assignments,
 )
 from app.db import database_is_ready
+from app.grades import (
+    NewGrade,
+    NotWaitingForGrade,
+    SubmissionMovedOn,
+    SubmissionNotFound,
+    record_grade,
+)
 from app.submissions import (
     AssignmentNotFound,
     IdUsedForOtherContent,
@@ -27,7 +35,7 @@ from app.submissions import (
 
 # Create the web application. The title and version show up on the automatic
 # documentation page FastAPI builds at /docs.
-app = FastAPI(title="Assessment service", version="0.3.0")
+app = FastAPI(title="Assessment service", version="0.4.0")
 
 
 # In plain English: the kinds of error whose built-in wording is safe, because it
@@ -158,6 +166,31 @@ def submission_detail(submission_id: UUID):
     if found is None:
         return JSONResponse(status_code=404, content={"problem": "Submission not found"})
     return found
+
+
+# In plain English: records a grade as the next version of a submission. The grader says
+# which version it graded ("based_on_version"). A new grade answers 201. The same grade
+# sent again answers 200 with the saved grade and adds nothing. A submission that has
+# moved on answers 409, and so does one that is not waiting for a grade (already graded,
+# or approved). An unknown submission answers 404. The replies use fixed wording and
+# never repeat what the caller sent.
+@app.post("/submissions/{submission_id}/grades")
+def add_grade(submission_id: UUID, body: NewGrade):
+    try:
+        saved, created = record_grade(submission_id, body)
+    except SubmissionNotFound:
+        return JSONResponse(status_code=404, content={"problem": "Submission not found"})
+    except SubmissionMovedOn:
+        return JSONResponse(
+            status_code=409,
+            content={"problem": "This submission has changed since that version"},
+        )
+    except NotWaitingForGrade:
+        return JSONResponse(
+            status_code=409,
+            content={"problem": "This submission is not waiting for a grade"},
+        )
+    return JSONResponse(status_code=201 if created else 200, content=jsonable_encoder(saved))
 
 
 # In plain English: an "are you ready to work?" check. It answers {"ok": true}
