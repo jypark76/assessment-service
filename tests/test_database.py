@@ -9,8 +9,6 @@
 # for every run and throws it away afterwards. To run these on your own computer,
 # start a temporary Postgres container yourself (see the README) and point the
 # DB_* settings at it.
-import os
-
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
@@ -20,20 +18,9 @@ from app.main import app
 
 client = TestClient(app)
 
-
-# In plain English: runs before every test in this file. With no database
-# settings at all, the tests quietly skip, so a normal run on your laptop still
-# works. In the pipeline REQUIRE_DB=1 is set, and then a missing database is a
-# failure, because a test that silently skips proves nothing. If the settings
-# point at any database other than "assessment_test", it refuses to run.
-@pytest.fixture(autouse=True)
-def require_test_database():
-    if not os.environ.get("DB_HOST"):
-        if os.environ.get("REQUIRE_DB") == "1":
-            pytest.fail("REQUIRE_DB is set but no database settings were given")
-        pytest.skip("no test database configured")
-    if os.environ.get("DB_NAME") != "assessment_test":
-        pytest.fail("refusing to run: DB_NAME must be 'assessment_test', never a real database")
+# The shared safety guard (see conftest.py): skips with no database settings and refuses to
+# run against any database not named assessment_test.
+pytestmark = pytest.mark.usefixtures("require_test_database")
 
 
 # In plain English: with the right password the service says it is ready.
