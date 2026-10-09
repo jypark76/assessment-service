@@ -92,7 +92,11 @@ jobs:
       - run: pip install -r requirements-dev.txt
 
       # REQUIRE_DB=1 turns "skipped" into "failed", so these tests cannot pass by
-      # silently doing nothing.
+      # silently doing nothing. This runs EVERY test file, not a list of database
+      # files, on purpose: a list goes stale when a new database test file is added,
+      # and the first job (no database) quietly skips those tests, so a stale list
+      # means they would never run anywhere. The Kubernetes file checks have their own
+      # job below.
       - name: Run the database tests
         env:
           DB_HOST: localhost
@@ -101,7 +105,7 @@ jobs:
           DB_USER: assessment_app
           DB_PASSWORD: ${{ env.APP_PASSWORD }}
           REQUIRE_DB: "1"
-        run: pytest -v tests/test_database.py
+        run: pytest -v --ignore=tests/test_k8s_manifests.py
 
       # If anything failed, show the database's own log to help find out why.
       - name: Show the database log
