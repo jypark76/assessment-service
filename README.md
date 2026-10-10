@@ -55,6 +55,32 @@ or delete, and a second run changes nothing. The pipeline runs it on every pull 
 Change 0001 adds `approval_sends`: a table that remembers which approved submissions have been sent on to
 the knowledge service, so the sender (next step) never has to guess.
 
+## The Kafka sender
+
+When an instructor approves a grade, the essay and its grade should reach the knowledge service. A second
+program, [`app/sender.py`](app/sender.py), does that. It runs as its own Deployment (`assessment-sender`)
+from the same image, started with `python -m app.sender`, and has no web port. The message format is the
+shared contract in `platform/contracts/approved-examples.md`.
+
+- Approving a grade only saves a row. It never talks to Kafka, so a Kafka outage cannot stop an instructor
+  approving.
+- Every few seconds the sender asks the database for approved submissions that are not yet in the table
+  `approval_sends`, publishes a message for each (key = the submission ID; no student name, no reviewer name)
+  and adds the submission to `approval_sends` ONLY after Kafka confirms it arrived.
+- Anything not confirmed stays waiting and is sent again on the next round. That is the re-send sweep:
+  nothing is lost if Kafka is down or the sender crashes at a bad moment.
+- Delivery is at-least-once: a message may occasionally arrive twice. That is harmless, because the knowledge
+  service recognises the submission ID and saves nothing twice.
+- A message is checked against the contract's limits before it is sent, so one the reader would refuse is
+  never published. Tests also check that this service's own limits never exceed the reader's.
+- No student text is written to the logs, only submission IDs and counts.
+
+Limits: one sender (a second would only create duplicates); a few seconds of delay by design; the tests use
+a pretend Kafka (the real one is proven on the cluster by hand); connections on the laptop are plain, with no
+login. A row that cannot be turned into a valid message (the field limits should make that
+impossible) is logged once by its ID and left out until the sender restarts, so it can never hold up the
+rows behind it.
+
 ## The service key
 
 Every route except `GET /health` and `GET /ready` needs the header `Authorization: Bearer <key>`.

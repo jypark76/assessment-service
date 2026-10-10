@@ -1,0 +1,55 @@
+# In plain English: the Kafka sender. It runs the SAME image as the assessment service but
+# starts a different program (python -m app.sender) that passes approved examples on to the
+# knowledge service through the "approved-examples" topic. It is its own Deployment so a
+# Kafka problem can never affect approving grades. It listens on no port, so it has no
+# probes and no Service; if it crashes, Kubernetes restarts it and anything not yet
+# confirmed is simply sent again. Exactly one copy runs: a second would only cause
+# harmless duplicate messages.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: assessment-sender
+  namespace: assessment
+  labels:
+    # Rolled out AFTER the database changes, like the service, so a new sender never
+    # starts on an old table.
+    deploy-phase: service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: assessment-sender
+  template:
+    metadata:
+      labels:
+        app: assessment-sender
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: assessment-sender
+          # Same image name as the service; each overlay adds the version tag.
+          image: assessment-service
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "app.sender"]
+          envFrom:
+            - configMapRef:
+                name: assessment-service-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: assessment-db
+                  key: app-password
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
