@@ -1,0 +1,104 @@
+# In plain English: a one-time job that applies the database changes (the files in
+# db/changelog) using Liquibase. The deploy script runs it on every deploy. Liquibase
+# looks in its own logbook table, runs only the changes not yet recorded there, and
+# exits. When everything is already applied it does nothing, so running it again is
+# always safe.
+#
+# It logs in as the database's admin, because changing a table's shape needs more
+# rights than the service has (the service can only read and add examples). The admin
+# password comes from the Kubernetes Secret you created by hand and is never written
+# in any file. The address of the database comes from the same settings the service
+# uses. For AWS, the overlay points them at the RDS database.
+#
+# The image version is NOT written here. Each overlay pins it, never "latest".
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: assessment-migrate
+  namespace: assessment
+  labels:
+    app: assessment-migrate
+spec:
+  # If the database is still starting, the job fails and tries again, waiting a
+  # little longer each time. Four retries wait about 2.5 minutes in all, which covers
+  # a database that is slow to start. A broken change fails for good after that, well
+  # inside the 10 minutes the deploy script waits.
+  backoffLimit: 4
+  # Kubernetes removes the finished job after an hour. The deploy script also removes
+  # the old one before each deploy, because a job cannot be changed after it is made.
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        # This label is what the database's door rule lets through.
+        app: assessment-migrate
+    spec:
+      # "Never" makes every retry a new pod, and a failed pod stays so its log can
+      # still be read. With "OnFailure" Kubernetes restarts the container inside one
+      # pod and deletes the pod when the retries run out, taking the log with it.
+      restartPolicy: Never
+      enableServiceLinks: false
+      # Runs as a normal user (1001 is the user inside the Liquibase image), never root.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+      containers:
+        - name: liquibase
+          image: liquibase/liquibase
+          imagePullPolicy: IfNotPresent
+          # Everything before the last word is a setting. The last word, "update",
+          # is the command: apply the changes that are missing.
+          args:
+            - --search-path=/liquibase/changelog
+            - --changelog-file=changelog-root.yaml
+            - update
+          env:
+            # Where the database is, taken from the service's own settings.
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: assessment-service-config
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: assessment-service-config
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: assessment-service-config
+                  key: DB_NAME
+            - name: LIQUIBASE_COMMAND_URL
+              value: "jdbc:postgresql://$(DB_HOST):$(DB_PORT)/$(DB_NAME)"
+            # The admin login. For AWS the overlay can change the name.
+            - name: LIQUIBASE_COMMAND_USERNAME
+              value: "postgres"
+            - name: LIQUIBASE_COMMAND_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: assessment-db
+                  key: postgres-password
+            # Keep the Java memory small so the job fits on a laptop.
+            - name: JAVA_OPTS
+              value: "-Xms64m -Xmx384m"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 768Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # The change files, handed over by the deploy script as a ConfigMap.
+            - name: changelog
+              mountPath: /liquibase/changelog
+              readOnly: true
+      volumes:
+        - name: changelog
+          configMap:
+            name: assessment-db-changelog

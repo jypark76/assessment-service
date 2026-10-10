@@ -1,7 +1,8 @@
 # In plain English: a door rule for the database pod. By default every pod in
 # the cluster can open a connection to the database. This rule changes that: once
-# it is in place, ONLY pods labelled "app: assessment-service" may connect, and
-# only to the database's own port (5432). Every other pod is turned away, even
+# it is in place, ONLY pods labelled "app: assessment-service" (the service) or
+# "app: assessment-migrate" (the one-time job that applies database changes) may
+# connect, and only to the database's own port (5432). Every other pod is turned away, even
 # one in the same namespace.
 #
 # It lives in the "local" overlay because the database pod itself is laptop only.
@@ -35,10 +36,14 @@ spec:
     - Ingress
   ingress:
     - from:
-        # The only pods allowed in: the assessment service.
+        # The only pods allowed in: the assessment service, and the one-time job that
+        # applies database changes (it needs the database to do its work).
         - podSelector:
             matchLabels:
               app: assessment-service
+        - podSelector:
+            matchLabels:
+              app: assessment-migrate
       ports:
         - protocol: TCP
           port: 5432

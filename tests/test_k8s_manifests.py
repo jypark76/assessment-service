@@ -24,11 +24,20 @@ NAMESPACE = "assessment"
 # Kinds that do not live inside a namespace.
 CLUSTER_WIDE = {"Namespace"}
 
+# Kinds that run containers. Every rule about pods applies to all of them, so the
+# one-time migration job cannot dodge a rule that the service has to follow.
+WORKLOADS = {"Deployment", "Job"}
+
+# The pods that must run locked down: a normal user, no extra privileges.
+LOCKED_DOWN = {"assessment-service", "assessment-migrate"}
+
 # Things the pods point at that are NOT in the rendered files on purpose:
-# "assessment-db-init" is made by deploy.sh from db/init.sql, and the Secret
-# "assessment-db" is created by hand and never stored in the repo.
+# "assessment-db-init" is made by deploy.sh from db/init.sql, "assessment-db-changelog"
+# is made by deploy.sh from the db/changelog folder, and the Secret "assessment-db"
+# is created by hand and never stored in the repo.
 MADE_OUTSIDE = {
     ("ConfigMap", "assessment-db-init"),
+    ("ConfigMap", "assessment-db-changelog"),
     ("Secret", "assessment-db"),
     ("Secret", "assessment-service-key"),
 }
@@ -107,7 +116,7 @@ def find_problems(docs):
         if kind == "Service" and doc["spec"].get("type", "ClusterIP") != "ClusterIP":
             problems.append(f"{label}: service type must be ClusterIP")
 
-        if kind != "Deployment":
+        if kind not in WORKLOADS:
             continue
 
         for container in containers_of(doc):
@@ -124,14 +133,20 @@ def find_problems(docs):
             if not container.get("resources", {}).get("limits", {}).get("memory"):
                 problems.append(f"{label}: container '{container['name']}' has no memory limit")
 
+            # Rule 8: a password is never written as a plain value in the files. It
+            # has to come from a Secret, because this repo is public.
+            for env in container.get("env", []):
+                if "PASSWORD" in env["name"].upper() and "valueFrom" not in env:
+                    problems.append(f"{label}: {env['name']} must come from a Secret, not a written value")
+
         # Rule 7: every ConfigMap or Secret a pod points at must exist in the
         # files, or be one of the few things made outside them on purpose.
         for reference in sorted(references_of(doc)):
             if reference not in defined and reference not in MADE_OUTSIDE:
                 problems.append(f"{label}: points at {reference[0]} '{reference[1]}', which does not exist")
 
-        # Rule 4: the service pod itself is locked down.
-        if name == "assessment-service":
+        # Rule 4: the service pod and the migration job are locked down.
+        if name in LOCKED_DOWN:
             pod = doc["spec"]["template"]["spec"]
             pod_security = pod.get("securityContext", {})
             if pod_security.get("runAsNonRoot") is not True:
@@ -173,6 +188,7 @@ def test_real_overlay_breaks_no_rules(real_docs):
     assert ("Deployment", "assessment-service") in kinds
     assert ("Deployment", "assessment-db") in kinds
     assert ("NetworkPolicy", "assessment-db-allow-service-only") in kinds
+    assert ("Job", "assessment-migrate") in kinds
     assert find_problems(real_docs) == []
 
 
@@ -180,6 +196,82 @@ def test_real_overlay_breaks_no_rules(real_docs):
 # the "bit bucket". That once made a real error look like "Secret missing".
 def test_deploy_script_does_not_hide_errors():
     assert "/dev/null" not in DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+
+# In plain English: the migration job logs in to the database as the admin, so its
+# password must come from the Kubernetes Secret, never from a value written in the
+# files. It must also really run Liquibase's "update", which applies only the
+# changes that are missing and does nothing when there are none.
+def test_the_migration_job_gets_its_password_from_the_secret_and_runs_update(real_docs):
+    job = next(doc for doc in real_docs if doc["kind"] == "Job" and doc["metadata"]["name"] == "assessment-migrate")
+    container = containers_of(job)[0]
+    env = {item["name"]: item for item in container.get("env", [])}
+    password = env["LIQUIBASE_COMMAND_PASSWORD"]
+    assert "value" not in password
+    assert password["valueFrom"]["secretKeyRef"] == {"name": "assessment-db", "key": "postgres-password"}
+    assert container["args"][-1] == "update"
+
+
+# In plain English: the database only lets labelled pods connect to it. The
+# migration job must carry a label the door rule accepts, or it could never reach
+# the database on a cluster that enforces the rule.
+def test_the_database_door_lets_the_migration_job_in(real_docs):
+    job = next(doc for doc in real_docs if doc["kind"] == "Job" and doc["metadata"]["name"] == "assessment-migrate")
+    assert job["spec"]["template"]["metadata"]["labels"]["app"] == "assessment-migrate"
+    policy = next(doc for doc in real_docs if doc["kind"] == "NetworkPolicy")
+    allowed = [
+        source["podSelector"]["matchLabels"]["app"]
+        for rule in policy["spec"]["ingress"]
+        for source in rule["from"]
+    ]
+    assert "assessment-migrate" in allowed
+    assert "assessment-service" in allowed
+
+
+# In plain English: the deploy script must hand the change files to the cluster and
+# clear out the old migration job first (a job cannot be changed after it is made).
+def test_deploy_script_hands_over_the_changes_and_clears_the_old_job():
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    assert "assessment-db-changelog" in script
+    assert "kubectl delete job assessment-migrate" in script
+
+
+# In plain English: the service must roll out only AFTER the database changes are
+# done. Otherwise a new service version could start on the old table, and if the
+# migration failed the new version would already be live. The Deployment carries a
+# label so the script can pick it out. The script applies everything else first, waits
+# for the migration, and only then applies the service and the sender. Nothing else may carry the
+# label, or it too would wait.
+def test_the_service_rolls_out_only_after_the_migration(real_docs):
+    labelled = [
+        doc["metadata"]["name"]
+        for doc in real_docs
+        if doc["metadata"].get("labels", {}).get("deploy-phase") == "service"
+    ]
+    assert labelled == ["assessment-service"]
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    everything_else_first = script.index("deploy-phase!=service")
+    wait_for_the_migration = script.index("\nwait_for_migration\n")
+    the_service_last = script.index("deploy-phase=service")
+    assert everything_else_first < wait_for_the_migration < the_service_last
+
+
+# In plain English: a failed migration must be reported as soon as it fails, with its
+# log. "kubectl wait" cannot do that: it only stops early on success, so a failure shows
+# up after the whole timeout. The script looks at the job's own state instead.
+def test_a_failed_migration_is_reported_without_waiting_for_a_timeout():
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    assert "kubectl wait" not in script
+    assert "Failed" in script
+    assert "kubectl logs -l job-name=assessment-migrate" in script
+
+
+# In plain English: the job's own retries must run out before the script stops
+# waiting, or the script would give up on a job that is still trying. Four retries
+# wait about 2.5 minutes in total, well inside the script's 10 minutes.
+def test_the_migration_job_gives_up_before_the_deploy_script_does(real_docs):
+    job = next(doc for doc in real_docs if doc["kind"] == "Job" and doc["metadata"]["name"] == "assessment-migrate")
+    assert job["spec"]["backoffLimit"] <= 4
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +320,36 @@ def good_docs():
                             }
                         ],
                     }
+                }
+            },
+        },
+        {
+            "kind": "Job",
+            "metadata": {"name": "assessment-migrate", "namespace": NAMESPACE},
+            "spec": {
+                "template": {
+                    "metadata": {"labels": {"app": "assessment-migrate"}},
+                    "spec": {
+                        "securityContext": {"runAsNonRoot": True, "runAsUser": 1001},
+                        "containers": [
+                            {
+                                "name": "liquibase",
+                                "image": "liquibase/liquibase:4.31.1",
+                                "args": ["update"],
+                                "env": [
+                                    {
+                                        "name": "LIQUIBASE_COMMAND_PASSWORD",
+                                        "valueFrom": {"secretKeyRef": {"name": "assessment-db", "key": "postgres-password"}},
+                                    }
+                                ],
+                                "resources": {"limits": {"memory": "768Mi"}},
+                                "securityContext": {
+                                    "allowPrivilegeEscalation": False,
+                                    "capabilities": {"drop": ["ALL"]},
+                                },
+                            }
+                        ],
+                    },
                 }
             },
         },
@@ -317,6 +439,44 @@ def test_allows_the_things_made_outside_on_purpose():
     docs = good_docs()
     assert ("Secret", "assessment-db") in references_of(deployment_of(docs))
     assert find_problems(docs) == []
+
+
+# In plain English: the rules must cover the migration job too, not only the
+# Deployments. A checker that skipped Jobs would let a bad migration job through.
+def job_of(docs):
+    return next(doc for doc in docs if doc["kind"] == "Job")
+
+
+def test_catches_a_problem_in_the_migration_job():
+    docs = good_docs()
+    containers_of(job_of(docs))[0]["image"] = "liquibase/liquibase:latest"
+    problems = find_problems(docs)
+    assert any("Job/assessment-migrate" in problem and "latest" in problem for problem in problems)
+
+
+def test_catches_a_migration_job_that_may_run_as_root():
+    docs = good_docs()
+    job_of(docs)["spec"]["template"]["spec"]["securityContext"] = {}
+    problems = find_problems(docs)
+    assert any("Job/assessment-migrate" in problem and "runAsNonRoot" in problem for problem in problems)
+
+
+# In plain English: a password must never be written as a plain value in the files.
+# It has to come from the Kubernetes Secret, because this repo is public.
+def test_catches_a_password_written_in_the_files():
+    docs = good_docs()
+    containers_of(job_of(docs))[0]["env"] = [{"name": "LIQUIBASE_COMMAND_PASSWORD", "value": "hunter2"}]
+    problems = find_problems(docs)
+    assert any("PASSWORD" in problem and "Secret" in problem for problem in problems)
+
+
+# In plain English: every retry of the migration job must be a NEW pod that stays
+# after it fails. With "OnFailure" Kubernetes restarts the container inside one pod
+# and deletes that pod when the retries run out, and the log goes with it. We found
+# that out in a real failure drill: the script could not show why the migration failed.
+def test_failed_migration_pods_are_kept_so_their_log_can_be_read(real_docs):
+    job = next(doc for doc in real_docs if doc["kind"] == "Job" and doc["metadata"]["name"] == "assessment-migrate")
+    assert job["spec"]["template"]["spec"]["restartPolicy"] == "Never"
 
 
 # In plain English: the service key must reach the pod from the Kubernetes Secret and

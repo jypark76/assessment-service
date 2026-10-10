@@ -7,6 +7,10 @@ kind: Deployment
 metadata:
   name: assessment-service
   namespace: assessment
+  labels:
+    # This label lets the deploy script roll the service out AFTER the database
+    # changes are done. It is on the Deployments that use the tables only.
+    deploy-phase: service
 spec:
   replicas: 1
   selector:
