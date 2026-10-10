@@ -73,7 +73,7 @@ done
 [ -n "$ready" ] || { echo "The throwaway database did not become ready." >&2; exit 1; }
 
 echo "Before the upgrade:"
-expect "the sent table is not there yet" "0"   "$(sql "SELECT count(*) FROM information_schema.tables WHERE table_name = 'approval_sends'")"
+expect "the sent tables are not there yet" "0"   "$(sql "SELECT count(*) FROM information_schema.tables WHERE table_name IN ('approval_sends', 'grading_job_sends')")"
 assignment="22222222-2222-4222-8222-222222222222"
 submission="33333333-3333-4333-8333-333333333333"
 sql "INSERT INTO assignments (assignment_id, instructor_username, title, rubric) VALUES ('$assignment', 'teacher', 'Old assignment', 'old rubric')" > /dev/null
@@ -84,9 +84,9 @@ echo "Running the upgrade (first time)..."
 migrate
 
 echo "After the upgrade:"
-expect "the sent table is there" "1"   "$(sql "SELECT count(*) FROM information_schema.tables WHERE table_name = 'approval_sends'")"
+expect "both sent tables are there" "2"   "$(sql "SELECT count(*) FROM information_schema.tables WHERE table_name IN ('approval_sends', 'grading_job_sends')")"
 expect "the old submission survived" "1" "$(sql "SELECT count(*) FROM submissions WHERE submission_id = '$submission'")"
-expect "Liquibase logged exactly one change" "1" "$(sql "SELECT count(*) FROM databasechangelog")"
+expect "Liquibase logged exactly two changes" "2" "$(sql "SELECT count(*) FROM databasechangelog")"
 
 echo "Checking the new table behaves:"
 sql "INSERT INTO approval_sends (submission_id) VALUES ('$submission')" > /dev/null
@@ -117,11 +117,35 @@ if app_sql "DELETE FROM approval_sends" > /dev/null 2>&1; then
 fi
 echo "ok: the service login cannot delete a row"
 
+# The job table is keyed by submission AND version: a second job for a new version is fine,
+# the same version twice is not.
+sql "INSERT INTO grading_job_sends (submission_id, version) VALUES ('$submission', 1)" > /dev/null
+sql "INSERT INTO grading_job_sends (submission_id, version) VALUES ('$submission', 3)" > /dev/null
+echo "ok: a job can be recorded for each version of a submission"
+if sql "INSERT INTO grading_job_sends (submission_id, version) VALUES ('$submission', 1)" > /dev/null 2>&1; then
+  echo "FAILED: the same job was recorded twice" >&2
+  exit 1
+fi
+echo "ok: the same job cannot be recorded twice"
+app_sql "INSERT INTO grading_job_sends (submission_id, version) VALUES (gen_random_uuid(), 1)" > /dev/null
+echo "ok: the service login can add a job row"
+if app_sql "UPDATE grading_job_sends SET sent_at = now()" > /dev/null 2>&1; then
+  echo "FAILED: the service login could change a job row" >&2
+  exit 1
+fi
+echo "ok: the service login cannot change a job row"
+if app_sql "DELETE FROM grading_job_sends" > /dev/null 2>&1; then
+  echo "FAILED: the service login could delete a job row" >&2
+  exit 1
+fi
+echo "ok: the service login cannot delete a job row"
+
 echo "Running the upgrade again (should change nothing)..."
 before="$(sql "SELECT count(*) FROM submissions")"
 migrate
-expect "Liquibase still has exactly one change logged" "1" "$(sql "SELECT count(*) FROM databasechangelog")"
+expect "Liquibase still has exactly two changes logged" "2" "$(sql "SELECT count(*) FROM databasechangelog")"
 expect "no submissions were added or lost" "$before" "$(sql "SELECT count(*) FROM submissions")"
 expect "no sent records were added or lost" "2" "$(sql "SELECT count(*) FROM approval_sends")"
+expect "no job records were added or lost" "3" "$(sql "SELECT count(*) FROM grading_job_sends")"
 
 echo "All upgrade checks passed."

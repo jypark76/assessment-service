@@ -67,3 +67,15 @@ def test_migration_0001_creates_the_sent_table_with_insert_and_select_only():
 def test_the_changelog_holds_no_passwords():
     for path in CHANGELOG.iterdir():
         assert "password" not in path.read_text(encoding="utf-8").lower(), path.name
+
+
+# In plain English: change 0002 must create the table that records which grading jobs have
+# been sent. A job is the submission AND its version, so both are in the key, and the service
+# login may only read and add rows.
+def test_migration_0002_creates_the_job_table_keyed_by_submission_and_version():
+    text = (CHANGELOG / "0002-add-grading-job-sends.sql").read_text(encoding="utf-8")
+    assert "CREATE TABLE grading_job_sends" in text
+    assert "PRIMARY KEY (submission_id, version)" in text
+    assert "GRANT SELECT, INSERT ON grading_job_sends TO assessment_app" in text
+    assert "UPDATE" not in text.split("GRANT")[1]
+    assert "DELETE" not in text.split("GRANT")[1]
