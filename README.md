@@ -32,6 +32,29 @@ must repeat the name, essay and assignment of version 1 (checked with a SHA-256
 fingerprint, using Postgres's bundled `pgcrypto`). The login can read and add rows,
 never change or delete them.
 
+## Changing the database
+
+`db/init.sql` builds the first version of the tables, once, on an empty database. Every change after
+that is a numbered file in [`db/changelog`](db/changelog), applied by Liquibase (a free tool that
+applies database changes in order and remembers which ones it has applied). The root list
+[`changelog-root.yaml`](db/changelog/changelog-root.yaml) names the files in order. Never edit a change
+that has already been applied. Add the next numbered file and list it. A test checks that every file is
+on the list.
+
+On every deploy, a one-time job (`k8s/base/migrate-job.yaml`) runs Liquibase as the database admin, with
+the password from the Kubernetes Secret, and applies only the changes that are missing. The service's own
+login still cannot change tables. `deploy.sh` deploys in two steps: first everything except the service,
+including the migration job, then it waits for the job, and only when the database changes are done does it
+roll out the service, so a new version never starts on an old table. If a change fails, the script stops
+within a few minutes, prints the job's log from every attempt, and leaves the running service untouched.
+
+`bash db/check-upgrade.sh` proves an upgrade on a throwaway database that already holds an assignment and
+a submission: they survive, the new table's rules work, the service login can read and add but not change
+or delete, and a second run changes nothing. The pipeline runs it on every pull request.
+
+Change 0001 adds `approval_sends`: a table that remembers which approved submissions have been sent on to
+the knowledge service, so the sender (next step) never has to guess.
+
 ## The service key
 
 Every route except `GET /health` and `GET /ready` needs the header `Authorization: Bearer <key>`.

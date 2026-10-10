@@ -1,0 +1,12 @@
+# In plain English: the ordered list of changes to the assessment database, after the
+# first version of the tables that db/init.sql builds. Liquibase reads this file,
+# checks its own logbook table in the database, and runs only the changes that are
+# not in the logbook yet. A change file that is not listed here never runs, so a
+# test checks that every file in this folder is on the list, in number order.
+#
+# To add a change: add the next numbered file (0002-...) and list it below. Never
+# edit a change that has already been applied. Liquibase notices and refuses.
+databaseChangeLog:
+  - include:
+      file: 0001-add-approval-sends.sql
+      relativeToChangelogFile: true

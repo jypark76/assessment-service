@@ -91,6 +91,27 @@ jobs:
 
       - run: pip install -r requirements-dev.txt
 
+      # The upgrade proof. It starts its OWN throwaway database built the old way,
+      # saves an assignment and a submission in it, applies the database changes with
+      # Liquibase, and checks the old rows survived, the new table and its rules work,
+      # and a second run of Liquibase changes nothing. It does not touch the test
+      # database above.
+      - name: Prove the database upgrade works on a database that already has data
+        run: bash db/check-upgrade.sh
+
+      # Bring the test database up to date the same way the cluster does: with
+      # Liquibase, as the admin. The tests then run against the upgraded database.
+      # --network container:test-db makes "localhost" mean the test database.
+      - name: Apply the database changes to the test database
+        run: |
+          docker run --rm --network container:test-db \
+            -v "$PWD/db/changelog:/liquibase/changelog:ro" \
+            -e LIQUIBASE_COMMAND_URL=jdbc:postgresql://localhost:5432/assessment_test \
+            -e LIQUIBASE_COMMAND_USERNAME=postgres \
+            -e LIQUIBASE_COMMAND_PASSWORD="$ADMIN_PASSWORD" \
+            liquibase/liquibase:4.31.1 \
+            --search-path=/liquibase/changelog --changelog-file=changelog-root.yaml update
+
       # REQUIRE_DB=1 turns "skipped" into "failed", so these tests cannot pass by
       # silently doing nothing. This runs EVERY test file, not a list of database
       # files, on purpose: a list goes stale when a new database test file is added,
@@ -131,7 +152,7 @@ jobs:
       - run: pip install -r requirements-dev.txt
 
       - name: Check the shell scripts
-        run: shellcheck k8s/deploy.sh k8s/overlays/local/set-app-password.sh
+        run: shellcheck k8s/deploy.sh k8s/overlays/local/set-app-password.sh db/check-upgrade.sh
 
       - name: Check the rendered Kubernetes files
         env:
