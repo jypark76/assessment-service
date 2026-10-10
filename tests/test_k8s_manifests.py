@@ -27,7 +27,11 @@ CLUSTER_WIDE = {"Namespace"}
 # Things the pods point at that are NOT in the rendered files on purpose:
 # "assessment-db-init" is made by deploy.sh from db/init.sql, and the Secret
 # "assessment-db" is created by hand and never stored in the repo.
-MADE_OUTSIDE = {("ConfigMap", "assessment-db-init"), ("Secret", "assessment-db")}
+MADE_OUTSIDE = {
+    ("ConfigMap", "assessment-db-init"),
+    ("Secret", "assessment-db"),
+    ("Secret", "assessment-service-key"),
+}
 
 
 # In plain English: builds the final Kubernetes files for the laptop settings and
@@ -313,3 +317,19 @@ def test_allows_the_things_made_outside_on_purpose():
     docs = good_docs()
     assert ("Secret", "assessment-db") in references_of(deployment_of(docs))
     assert find_problems(docs) == []
+
+
+# In plain English: the service key must reach the pod from the Kubernetes Secret and
+# never from a value written in the files, and the deploy script must stop with the
+# create command if that Secret does not exist yet.
+def test_the_service_key_comes_from_a_secret_never_from_the_files(real_docs):
+    deployment = next(d for d in real_docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "assessment-service")
+    env = {item["name"]: item for item in containers_of(deployment)[0]["env"]}
+    key = env["SERVICE_KEYS"]
+    assert "value" not in key
+    assert key["valueFrom"]["secretKeyRef"] == {"name": "assessment-service-key", "key": "keys"}
+    settings = next(d for d in real_docs if d["kind"] == "ConfigMap" and d["metadata"]["name"] == "assessment-service-config")
+    assert "SERVICE_KEYS" not in settings["data"]
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    assert "kubectl get secret assessment-service-key" in script
+    assert "kubectl create secret generic assessment-service-key" in script

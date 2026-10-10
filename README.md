@@ -32,6 +32,25 @@ must repeat the name, essay and assignment of version 1 (checked with a SHA-256
 fingerprint, using Postgres's bundled `pgcrypto`). The login can read and add rows,
 never change or delete them.
 
+## The service key
+
+Every route except `GET /health` and `GET /ready` needs the header `Authorization: Bearer <key>`.
+The key is one long secret shared with the trusted callers (the other services). It lives in the
+Kubernetes Secret `assessment-service-key` (made by hand, never in this repo) and reaches the pod
+as the setting `SERVICE_KEYS`.
+
+- A missing or wrong key answers 401 with the same fixed reply every time. It never says what was
+  wrong and never repeats what was sent.
+- If no usable key is configured the service answers 503 on every protected route. It never opens up.
+- A key shorter than 32 characters is not usable. Make one with `openssl rand -hex 32`.
+- The setting may list several keys separated by commas. To replace a key without downtime: add the
+  new one next to the old, switch the callers to it, then remove the old one.
+- New routes are protected by default. A test finds every route by asking the app, so a route added
+  later cannot be forgotten.
+
+One shared key says "a trusted caller", not "which person", and it travels as plain HTTP inside the
+cluster on the laptop. Real user login comes later.
+
 ## API
 
 | Call | What it does |
@@ -158,15 +177,16 @@ On AWS the database is RDS, so the Postgres pod is not used there.
 
 ## Known limits
 
-- The service has no authentication. It does not check who is calling, so anyone
-  who can reach it can create and read assignments, can read any submission,
-  including the student's name and essay, if they know its ID, and could write a
-  grade to a submission that is waiting for one.
+- The service key proves only that the caller is a trusted service, not which person is
+  acting. Any holder of the key can create and read assignments, read any submission,
+  including the student's name and essay, if they know its ID, and write a grade to a
+  submission that is waiting for one. Real per-user login is planned.
 - `reviewer_username` is a name the caller claims, not a proven identity, so anyone who
   can reach the service can approve or reject a grade. That is acceptable only while
   nothing consumes approvals. Before approved examples are sent on to the knowledge
   service (the store the grader learns from), callers must be authenticated, or a forged
-  approval could put a bad example into future grading. Who may see what is
+  approval could put a bad example into future grading. The service key (above) narrows who can
+  call at all; it does not prove which instructor approved. Who may see what is
   decided when the frontend arrives. Student names are stored only in this service.
 - Reachability is limited by the network only: the service is `ClusterIP`, so nothing
   outside the cluster can reach it, but there is no rule yet on which pods inside the

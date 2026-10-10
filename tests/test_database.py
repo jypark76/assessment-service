@@ -15,8 +15,9 @@ from fastapi.testclient import TestClient
 
 from app.db import connect
 from app.main import app
+from conftest import AUTH_HEADERS
 
-client = TestClient(app)
+client = TestClient(app, headers=AUTH_HEADERS)
 
 # The shared safety guard (see conftest.py): skips with no database settings and refuses to
 # run against any database not named assessment_test.

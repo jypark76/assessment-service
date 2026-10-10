@@ -15,10 +15,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from conftest import AUTH_HEADERS
 
 pytestmark = pytest.mark.usefixtures("require_test_database")
 
-client = TestClient(app)
+client = TestClient(app, headers=AUTH_HEADERS)
 
 
 # In plain English: a correct request body. Titles must be unique, so each one gets a

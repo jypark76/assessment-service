@@ -22,3 +22,11 @@ def require_test_database():
         pytest.skip("no test database configured")
     if os.environ.get("DB_NAME") != "assessment_test":
         pytest.fail("refusing to run: DB_NAME must be 'assessment_test', never a real database")
+
+
+# In plain English: the shared service key for tests. The service refuses every call that
+# does not carry a key, so the test setup configures one and hands each test client the
+# matching header. The key is a made-up value that exists only in tests.
+TEST_KEY = "test-only-key-0123456789abcdef0123456789"
+AUTH_HEADERS = {"Authorization": f"Bearer {TEST_KEY}"}
+os.environ["SERVICE_KEYS"] = TEST_KEY

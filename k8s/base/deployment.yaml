@@ -46,6 +46,14 @@ spec:
                 secretKeyRef:
                   name: assessment-db
                   key: app-password
+            # The shared service key callers must present. Like the password it comes from
+            # a Secret created by hand, never from a file. It may list several keys,
+            # separated by commas, so a key can be replaced without downtime.
+            - name: SERVICE_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: assessment-service-key
+                  key: keys
           # "Are you alive?" If this keeps failing, Kubernetes restarts the pod.
           livenessProbe:
             httpGet:

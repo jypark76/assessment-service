@@ -19,10 +19,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from conftest import AUTH_HEADERS
 
 pytestmark = pytest.mark.usefixtures("require_test_database")
 
-client = TestClient(app)
+client = TestClient(app, headers=AUTH_HEADERS)
 
 JSON_HEADERS = {"Content-Type": "application/json"}
 
