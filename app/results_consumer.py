@@ -12,7 +12,8 @@
 #                normal race, not an error: it is dropped and only the submission ID and the word
 #                "outdated" are logged.
 #   dead_letter  a message that can never be recorded (not JSON, unknown version, a broken rule,
-#                key not equal to the submission ID, a submission that does not exist, or a save
+#                key not equal to the submission ID, a submission that does not exist, a version
+#                the submission never had (the grader copied back the wrong number), or a save
 #                the database refuses for this message alone). It is copied to the topic
 #                "grading-results.dead-letter" with the reason in a header, so it cannot block its
 #                lane, and a person can look at it. The copy must be CONFIRMED delivered before
@@ -37,6 +38,7 @@ from app.grades import (
     NotWaitingForGrade,
     SubmissionMovedOn,
     SubmissionNotFound,
+    VersionDoesNotExist,
     record_grade,
 )
 
@@ -91,6 +93,10 @@ def handle_message(key, value, record=record_grade):
         _, created = record(message.submission_id, grade)
     except SubmissionNotFound:
         return "dead_letter", "unknown_submission"
+    except VersionDoesNotExist:
+        # The grader named a version the submission never had. That is a bug on the grader's side,
+        # not a race, so a person must see it: dead-letter it instead of dropping it quietly.
+        return "dead_letter", "unknown_version"
     except (SubmissionMovedOn, NotWaitingForGrade):
         return "outdated", None
     except (psycopg.DataError, psycopg.IntegrityError):

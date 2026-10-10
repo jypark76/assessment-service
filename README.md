@@ -124,7 +124,8 @@ submission's next version, with the same routine as `POST /submissions/{id}/grad
 - An out-of-date result (the submission moved on, or another grade for that version was recorded first) is a normal
   race. It is dropped, and only the submission ID and the word "outdated" are logged.
 - A message that can never be recorded (not JSON, unknown version, a broken rule, key not equal to the submission ID, a
-  submission that does not exist, or a save the database refuses for that message alone) is copied to
+  submission that does not exist, a version the submission never had (the grader copied back the wrong number, which is a
+  bug to look at and not a race), or a save the database refuses for that message alone) is copied to
   `grading-results.dead-letter` with the reason in an `error` header, and that copy must be CONFIRMED delivered before
   the message is marked done. A person has to look at the dead-letter topic; nothing reads it automatically.
 - Temporary trouble (database or Kafka down) commits nothing; the program stops and Kubernetes restarts it, and the

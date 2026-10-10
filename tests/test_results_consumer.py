@@ -17,7 +17,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import results_consumer
-from app.grades import GRADE_MAX, REASONING_MAX, NotWaitingForGrade, SubmissionMovedOn, SubmissionNotFound
+from app.grades import (
+    GRADE_MAX,
+    REASONING_MAX,
+    NotWaitingForGrade,
+    SubmissionMovedOn,
+    SubmissionNotFound,
+    VersionDoesNotExist,
+)
 from app.main import app
 from app.results_consumer import DEAD_LETTER_TOPIC, TOPIC, handle_message, run
 from conftest import AUTH_HEADERS
@@ -147,6 +154,20 @@ def test_an_out_of_date_result_is_dropped_not_dead_lettered(error):
         raise error
 
     assert handle_message(*keyed(good_value()), record=record) == ("outdated", None)
+
+
+# A grader that copies back a version the submission never had is a bug, not a race. Dropping it
+# quietly would hide the bug (every result would vanish with one info line), so it is dead-lettered
+# where a person will see it.
+def test_a_result_for_a_version_that_never_existed_is_dead_lettered_not_dropped():
+    def record(submission_id, grade):
+        raise VersionDoesNotExist()
+
+    assert handle_message(*keyed(good_value()), record=record) == ("dead_letter", "unknown_version")
+
+
+def test_a_version_that_never_existed_is_a_kind_of_moved_on_so_the_route_still_answers_409():
+    assert issubclass(VersionDoesNotExist, SubmissionMovedOn)
 
 
 # A save the database refuses for this message alone would fail the same way every time, so it
@@ -435,10 +456,22 @@ def test_a_second_different_grade_for_the_same_version_is_outdated_and_changes_n
 
 
 @pytest.mark.usefixtures("require_test_database")
-def test_a_result_for_the_wrong_version_is_outdated():
+def test_a_result_for_a_version_that_never_existed_is_dead_lettered():
     submission_id = new_submission()
-    assert handle_message(*keyed(good_value(submission_id=submission_id, based_on_version=5))) == ("outdated", None)
+    assert handle_message(*keyed(good_value(submission_id=submission_id, based_on_version=5))) == ("dead_letter", "unknown_version")
     assert len(history(submission_id)) == 1
+
+
+@pytest.mark.usefixtures("require_test_database")
+def test_a_result_for_an_older_version_is_still_just_outdated():
+    submission_id = new_submission()
+    assert handle_message(*keyed(good_value(submission_id=submission_id, based_on_version=1))) == ("saved", None)
+    assert client.post(
+        f"/submissions/{submission_id}/reviews",
+        json={"based_on_version": 2, "decision": "reject", "reviewer_username": "instructor1", "feedback": "Redo."},
+    ).status_code == 201
+    # Version 1 did exist; the submission has simply moved on to version 3.
+    assert handle_message(*keyed(good_value(submission_id=submission_id, based_on_version=1, ai_grade="Z"))) == ("outdated", None)
 
 
 @pytest.mark.usefixtures("require_test_database")
