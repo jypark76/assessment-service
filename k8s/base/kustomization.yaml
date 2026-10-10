@@ -7,5 +7,6 @@ resources:
   - namespace.yaml
   - deployment.yaml
   - sender-deployment.yaml
+  - job-sender-deployment.yaml
   - service.yaml
   - migrate-job.yaml

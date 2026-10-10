@@ -10,3 +10,9 @@ databaseChangeLog:
   - include:
       file: 0001-add-approval-sends.sql
       relativeToChangelogFile: true
+  - include:
+      file: 0002-add-grading-job-sends.sql
+      relativeToChangelogFile: true
+  - include:
+      file: 0003-let-grading-jobs-be-sent-again.sql
+      relativeToChangelogFile: true

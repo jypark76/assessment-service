@@ -103,37 +103,42 @@ def record_sent(submission_id):
 # complained about once, and left out of every later fetch, so a pile of them can never fill
 # the batch and hold up the good rows behind them. It lives in memory only: after a restart
 # they are tried (and complained about) once more, which is what you want after a fix.
-def send_batch(producer, fetch, record, limit=50, skipped=None):
+#
+# The topic, the message builder and the way a row is identified are parameters, so the
+# job sender (app/job_sender.py) uses exactly this same record-only-after-confirmation logic.
+def send_batch(producer, fetch, record, limit=50, skipped=None, topic=TOPIC, build=None, identify=None):
     skipped = set() if skipped is None else skipped
+    build = build or build_message
+    identify = identify or (lambda row: row[0])
     confirmed = []
     refused = 0
 
-    def make_callback(submission_id):
+    def make_callback(identity):
         def callback(error, _message):
             nonlocal refused
             if error:
                 refused += 1
             else:
-                confirmed.append(submission_id)
+                confirmed.append(identity)
 
         return callback
 
     for row in fetch(limit, skipped):
-        submission_id = row[0]
+        identity = identify(row)
         try:
-            key, value = build_message(row)
+            key, value = build(row)
         except ValueError:
             # Not the error text: it could quote the student's work.
-            log.error("submission %s cannot be turned into a valid message; skipped", submission_id)
-            skipped.add(submission_id)
+            log.error("submission %s cannot be turned into a valid message; skipped", row[0])
+            skipped.add(identity)
             continue
-        producer.produce(TOPIC, key=key, value=value, on_delivery=make_callback(submission_id))
+        producer.produce(topic, key=key, value=value, on_delivery=make_callback(identity))
 
     if producer.flush(30) != 0:
         log.warning("Kafka did not confirm every message in time; they will be sent again")
         return 0
-    for submission_id in confirmed:
-        record(submission_id)
+    for identity in confirmed:
+        record(identity)
     if refused:
         log.warning("%s message(s) were refused by Kafka; they will be sent again", refused)
     if confirmed:
@@ -145,10 +150,10 @@ def send_batch(producer, fetch, record, limit=50, skipped=None):
 # nothing (nothing waiting, or Kafka refused everything), it rests for a few seconds first,
 # so it never hammers the database or a struggling Kafka. The pieces are parameters so tests
 # can pass pretend ones.
-def run(producer, fetch, record, should_stop=lambda: False, pause=5, sleep=time.sleep, limit=50):
+def run(producer, fetch, record, should_stop=lambda: False, pause=5, sleep=time.sleep, limit=50, **how):
     skipped = set()
     while not should_stop():
-        if send_batch(producer, fetch, record, limit=limit, skipped=skipped) == 0:
+        if send_batch(producer, fetch, record, limit=limit, skipped=skipped, **how) == 0:
             sleep(pause)
 
 

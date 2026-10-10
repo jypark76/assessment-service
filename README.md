@@ -81,6 +81,36 @@ login. A row that cannot be turned into a valid message (the field limits should
 impossible) is logged once by its ID and left out until the sender restarts, so it can never hold up the
 rows behind it.
 
+## The grading job sender
+
+A submission that is waiting for a grade has to reach the grader. A third program,
+[`app/job_sender.py`](app/job_sender.py), tells it, through the Kafka topic `grading-jobs`. It runs as its own
+Deployment (`assessment-job-sender`) from the same image, and works exactly like the approved-example sender
+(it shares the same sending loop). The message format is the shared contract in
+`platform/contracts/grading-jobs.md`.
+
+- A submission is waiting for a grade when its NEWEST version is "submitted" (a first submission) or "rejected"
+  (an instructor sent it back). A job is identified by the submission AND that version, so a second rejection
+  creates a second job.
+- Every few seconds the sender finds the waiting ones that are not yet in the table `grading_job_sends`,
+  publishes a job for each, and adds it to the table ONLY after Kafka confirms it arrived. Anything not
+  confirmed is sent again next round.
+- The job carries the assignment's rubric, the student's work and, after a rejection, the instructor's feedback,
+  so the grader never sees the same input twice. It never carries the student's name or the reviewer's name.
+- A job delivered twice is harmless: the first grade recorded for a version wins, and the others are refused as
+  out of date.
+- "Kafka confirmed it" only proves the job arrived. If the grader later sets it aside, or Kafka drops it after its 7
+  days, nothing would ever grade the submission. So a job that was sent 6 hours ago and is still waiting (no grade has
+  come back) is sent again, at most 5 times in all. After that the submission stays waiting for a person to look at:
+  it is a waiting submission with 5 rows in `grading_job_sends`. Each send is its own row, so the attempts can be
+  counted.
+- A job that cannot be turned into a valid message is logged once by its ID and left out until the sender
+  restarts, so it cannot hold up the rest. No student text is written to the logs.
+
+Limits: one job sender; a few seconds of delay by design; the query that finds the newest version of every
+submission reads the whole `submissions` table each round, which is fine at this size and would want an index or
+a "waiting" marker at much larger scale; the tests use a pretend Kafka.
+
 ## The service key
 
 Every route except `GET /health` and `GET /ready` needs the header `Authorization: Bearer <key>`.
