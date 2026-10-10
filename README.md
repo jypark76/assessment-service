@@ -111,6 +111,30 @@ Limits: one job sender; a few seconds of delay by design; the query that finds t
 submission reads the whole `submissions` table each round, which is fine at this size and would want an index or
 a "waiting" marker at much larger scale; the tests use a pretend Kafka.
 
+## The grading results consumer
+
+The grader sends each grade back as a message on the Kafka topic `grading-results`. A fourth program,
+[`app/results_consumer.py`](app/results_consumer.py), takes them off the topic and records each one as the
+submission's next version, with the same routine as `POST /submissions/{id}/grades`. It runs as its own Deployment
+(`assessment-results-consumer`) from the same image, with no web port. The message format is the shared contract in
+`platform/contracts/grading-results.md`.
+
+- A message is marked done only AFTER it has been dealt with, so a crash never loses one.
+- A good grade for a submission that is waiting is recorded. A repeat of a grade already recorded adds nothing.
+- An out-of-date result (the submission moved on, or another grade for that version was recorded first) is a normal
+  race. It is dropped, and only the submission ID and the word "outdated" are logged.
+- A message that can never be recorded (not JSON, unknown version, a broken rule, key not equal to the submission ID, a
+  submission that does not exist, or a save the database refuses for that message alone) is copied to
+  `grading-results.dead-letter` with the reason in an `error` header, and that copy must be CONFIRMED delivered before
+  the message is marked done. A person has to look at the dead-letter topic; nothing reads it automatically.
+- Temporary trouble (database or Kafka down) commits nothing; the program stops and Kubernetes restarts it, and the
+  message is read again.
+- Only the submission ID, the outcome and the offset are logged. No student text or reasoning.
+
+Limits: one consumer for now (more can share the topic's 3 lanes); the tests use a pretend Kafka (the real one is
+proven on the cluster by hand); connections on the laptop are plain, with no login. A grade is recorded only if
+the grader copies back the version it was given, which the contract requires.
+
 ## The service key
 
 Every route except `GET /health` and `GET /ready` needs the header `Authorization: Bearer <key>`.

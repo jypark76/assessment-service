@@ -29,7 +29,13 @@ CLUSTER_WIDE = {"Namespace"}
 WORKLOADS = {"Deployment", "Job"}
 
 # The pods that must run locked down: a normal user, no extra privileges.
-LOCKED_DOWN = {"assessment-service", "assessment-sender", "assessment-job-sender", "assessment-migrate"}
+LOCKED_DOWN = {
+    "assessment-service",
+    "assessment-sender",
+    "assessment-job-sender",
+    "assessment-results-consumer",
+    "assessment-migrate",
+}
 
 # Things the pods point at that are NOT in the rendered files on purpose:
 # "assessment-db-init" is made by deploy.sh from db/init.sql, "assessment-db-changelog"
@@ -188,6 +194,7 @@ def test_real_overlay_breaks_no_rules(real_docs):
     assert ("Deployment", "assessment-service") in kinds
     assert ("Deployment", "assessment-sender") in kinds
     assert ("Deployment", "assessment-job-sender") in kinds
+    assert ("Deployment", "assessment-results-consumer") in kinds
     assert ("Deployment", "assessment-db") in kinds
     assert ("NetworkPolicy", "assessment-db-allow-service-only") in kinds
     assert ("Job", "assessment-migrate") in kinds
@@ -229,6 +236,7 @@ def test_the_database_door_lets_the_migration_job_in(real_docs):
     assert "assessment-migrate" in allowed
     assert "assessment-sender" in allowed
     assert "assessment-job-sender" in allowed
+    assert "assessment-results-consumer" in allowed
     assert "assessment-service" in allowed
 
 
@@ -252,7 +260,12 @@ def test_the_service_rolls_out_only_after_the_migration(real_docs):
         for doc in real_docs
         if doc["metadata"].get("labels", {}).get("deploy-phase") == "service"
     ]
-    assert sorted(labelled) == ["assessment-job-sender", "assessment-sender", "assessment-service"]
+    assert sorted(labelled) == [
+        "assessment-job-sender",
+        "assessment-results-consumer",
+        "assessment-sender",
+        "assessment-service",
+    ]
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
     everything_else_first = script.index("deploy-phase!=service")
     wait_for_the_migration = script.index("\nwait_for_migration\n")
@@ -535,6 +548,26 @@ def test_the_job_sender_runs_the_job_sender_code_from_the_same_image(real_docs):
     assert "ports" not in container
     assert sender["spec"]["replicas"] == 1
     assert sender["spec"]["template"]["metadata"]["labels"]["app"] == "assessment-job-sender"
+    password = {item["name"]: item for item in container["env"]}["DB_PASSWORD"]
+    assert "value" not in password
+    assert password["valueFrom"]["secretKeyRef"] == {"name": "assessment-db", "key": "app-password"}
+    assert container["envFrom"] == [{"configMapRef": {"name": "assessment-service-config"}}]
+    assert "SERVICE_KEYS" not in {item["name"] for item in container["env"]}
+
+
+# In plain English: the results consumer is its own Deployment from the SAME image, started with a
+# different command. No port, one copy for now, the database password from the Secret, the Kafka
+# address from the shared settings, and no service key (it records grades by itself and does not
+# call the service's routes).
+def test_the_results_consumer_runs_the_consumer_code_from_the_same_image(real_docs):
+    service = next(d for d in real_docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "assessment-service")
+    consumer = next(d for d in real_docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "assessment-results-consumer")
+    container = containers_of(consumer)[0]
+    assert container["image"] == containers_of(service)[0]["image"]
+    assert container["command"] == ["python", "-m", "app.results_consumer"]
+    assert "ports" not in container
+    assert consumer["spec"]["replicas"] == 1
+    assert consumer["spec"]["template"]["metadata"]["labels"]["app"] == "assessment-results-consumer"
     password = {item["name"]: item for item in container["env"]}["DB_PASSWORD"]
     assert "value" not in password
     assert password["valueFrom"]["secretKeyRef"] == {"name": "assessment-db", "key": "app-password"}

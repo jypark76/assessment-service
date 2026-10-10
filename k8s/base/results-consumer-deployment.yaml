@@ -1,0 +1,55 @@
+# In plain English: the Kafka results consumer. It runs the SAME image as the assessment service but
+# starts a different program (python -m app.results_consumer) that takes grades back from the
+# grader off the "grading-results" topic and records them. It is its own Deployment so a Kafka
+# problem can never affect the web service. It listens on no port, so it has no probes and no
+# Service; if it crashes, Kubernetes restarts it and the message that was in hand is read again (a
+# message is only marked done after it is dealt with). One copy runs for now; more can be added
+# later and share the topic's lanes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: assessment-results-consumer
+  namespace: assessment
+  labels:
+    # Rolled out AFTER the database changes, like the service, so a new sender never
+    # starts on an old table.
+    deploy-phase: service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: assessment-results-consumer
+  template:
+    metadata:
+      labels:
+        app: assessment-results-consumer
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: assessment-results-consumer
+          # Same image name as the service; each overlay adds the version tag.
+          image: assessment-service
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "app.results_consumer"]
+          envFrom:
+            - configMapRef:
+                name: assessment-service-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: assessment-db
+                  key: app-password
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
