@@ -18,6 +18,7 @@ from app.assignments import (
     get_assignment,
     list_assignments,
 )
+from app.auth import require_service_key
 from app.db import database_is_ready
 from app.grades import (
     NewGrade,
@@ -38,7 +39,11 @@ from app.submissions import (
 
 # Create the web application. The title and version show up on the automatic
 # documentation page FastAPI builds at /docs.
-app = FastAPI(title="Assessment service", version="0.5.0")
+app = FastAPI(title="Assessment service", version="0.6.0")
+
+# Every request passes the service-key guard first (see app/auth.py). Only the two health
+# checks are open.
+app.middleware("http")(require_service_key)
 
 
 # In plain English: the kinds of error whose built-in wording is safe, because it

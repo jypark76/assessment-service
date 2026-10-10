@@ -72,6 +72,16 @@ if [ -z "$secret" ]; then
   exit 1
 fi
 
+# The service key callers must present. Same rule: it must already exist, and the script
+# never creates it. The key is a long random value; every service that calls this one
+# gets it from this Secret. To make one: openssl rand -hex 32
+key_secret="$(kubectl get secret assessment-service-key -n assessment --ignore-not-found -o name)"
+if [ -z "$key_secret" ]; then
+  echo "The Secret 'assessment-service-key' does not exist yet. Create it first, with your own random key:" >&2
+  echo "  kubectl create secret generic assessment-service-key -n assessment --from-literal=keys=\"\$(openssl rand -hex 32)\"" >&2
+  exit 1
+fi
+
 # Laptop only: hand the table-setup file (db/init.sql) to the database pod. It
 # contains no secrets. The pod runs it by itself on its first start.
 if [ "$overlay" = "local" ]; then

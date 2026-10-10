@@ -26,11 +26,12 @@ from fastapi.testclient import TestClient
 from app import grades, reviews
 from app.grades import NewGrade, record_grade
 from app.main import app
+from conftest import AUTH_HEADERS
 from app.reviews import NewReview, record_review
 
 pytestmark = pytest.mark.usefixtures("require_test_database")
 
-client = TestClient(app)
+client = TestClient(app, headers=AUTH_HEADERS)
 
 MOVED_ON = {"problem": "This submission has changed since that version"}
 WORKERS = 8
@@ -139,7 +140,7 @@ def run_together(requests):
     results = [None] * len(requests)
 
     def worker(index, send):
-        local_client = TestClient(app)
+        local_client = TestClient(app, headers=AUTH_HEADERS)
         barrier.wait()
         try:
             results[index] = send(local_client)
