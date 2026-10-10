@@ -99,6 +99,11 @@ Deployment (`assessment-job-sender`) from the same image, and works exactly like
   so the grader never sees the same input twice. It never carries the student's name or the reviewer's name.
 - A job delivered twice is harmless: the first grade recorded for a version wins, and the others are refused as
   out of date.
+- "Kafka confirmed it" only proves the job arrived. If the grader later sets it aside, or Kafka drops it after its 7
+  days, nothing would ever grade the submission. So a job that was sent 6 hours ago and is still waiting (no grade has
+  come back) is sent again, at most 5 times in all. After that the submission stays waiting for a person to look at:
+  it is a waiting submission with 5 rows in `grading_job_sends`. Each send is its own row, so the attempts can be
+  counted.
 - A job that cannot be turned into a valid message is logged once by its ID and left out until the sender
   restarts, so it cannot hold up the rest. No student text is written to the logs.
 

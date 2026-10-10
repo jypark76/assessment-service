@@ -86,7 +86,7 @@ migrate
 echo "After the upgrade:"
 expect "both sent tables are there" "2"   "$(sql "SELECT count(*) FROM information_schema.tables WHERE table_name IN ('approval_sends', 'grading_job_sends')")"
 expect "the old submission survived" "1" "$(sql "SELECT count(*) FROM submissions WHERE submission_id = '$submission'")"
-expect "Liquibase logged exactly two changes" "2" "$(sql "SELECT count(*) FROM databasechangelog")"
+expect "Liquibase logged exactly three changes" "3" "$(sql "SELECT count(*) FROM databasechangelog")"
 
 echo "Checking the new table behaves:"
 sql "INSERT INTO approval_sends (submission_id) VALUES ('$submission')" > /dev/null
@@ -117,16 +117,17 @@ if app_sql "DELETE FROM approval_sends" > /dev/null 2>&1; then
 fi
 echo "ok: the service login cannot delete a row"
 
-# The job table is keyed by submission AND version: a second job for a new version is fine,
-# the same version twice is not.
-sql "INSERT INTO grading_job_sends (submission_id, version) VALUES ('$submission', 1)" > /dev/null
-sql "INSERT INTO grading_job_sends (submission_id, version) VALUES ('$submission', 3)" > /dev/null
-echo "ok: a job can be recorded for each version of a submission"
-if sql "INSERT INTO grading_job_sends (submission_id, version) VALUES ('$submission', 1)" > /dev/null 2>&1; then
-  echo "FAILED: the same job was recorded twice" >&2
+# The job table keeps one row per SEND: the same job may be recorded again at another time (a
+# job nobody answered is sent again), but the exact same send cannot be recorded twice.
+sql "INSERT INTO grading_job_sends (submission_id, version, sent_at) VALUES ('$submission', 1, '2026-01-01 00:00:00+00')" > /dev/null
+sql "INSERT INTO grading_job_sends (submission_id, version, sent_at) VALUES ('$submission', 1, '2026-01-02 00:00:00+00')" > /dev/null
+sql "INSERT INTO grading_job_sends (submission_id, version, sent_at) VALUES ('$submission', 3, '2026-01-01 00:00:00+00')" > /dev/null
+echo "ok: a job can be recorded again at another time, and for another version"
+if sql "INSERT INTO grading_job_sends (submission_id, version, sent_at) VALUES ('$submission', 1, '2026-01-01 00:00:00+00')" > /dev/null 2>&1; then
+  echo "FAILED: the exact same send was recorded twice" >&2
   exit 1
 fi
-echo "ok: the same job cannot be recorded twice"
+echo "ok: the exact same send cannot be recorded twice"
 app_sql "INSERT INTO grading_job_sends (submission_id, version) VALUES (gen_random_uuid(), 1)" > /dev/null
 echo "ok: the service login can add a job row"
 if app_sql "UPDATE grading_job_sends SET sent_at = now()" > /dev/null 2>&1; then
@@ -143,9 +144,9 @@ echo "ok: the service login cannot delete a job row"
 echo "Running the upgrade again (should change nothing)..."
 before="$(sql "SELECT count(*) FROM submissions")"
 migrate
-expect "Liquibase still has exactly two changes logged" "2" "$(sql "SELECT count(*) FROM databasechangelog")"
+expect "Liquibase still has exactly three changes logged" "3" "$(sql "SELECT count(*) FROM databasechangelog")"
 expect "no submissions were added or lost" "$before" "$(sql "SELECT count(*) FROM submissions")"
 expect "no sent records were added or lost" "2" "$(sql "SELECT count(*) FROM approval_sends")"
-expect "no job records were added or lost" "3" "$(sql "SELECT count(*) FROM grading_job_sends")"
+expect "no job records were added or lost" "4" "$(sql "SELECT count(*) FROM grading_job_sends")"
 
 echo "All upgrade checks passed."

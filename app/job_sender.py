@@ -12,7 +12,13 @@
 #
 # A submission is waiting for a grade when its newest version is "submitted" (a first
 # submission) or "rejected" (an instructor sent it back). A job is identified by the
-# submission AND that version, so a second rejection creates a second job. On a rejection
+# submission AND that version, so a second rejection creates a second job.
+#
+# "Kafka confirmed it" only proves the job was received. The grader may later set it aside as
+# unreadable, or Kafka may drop it after 7 days, and nothing would ever grade the submission.
+# So a job that was sent RESEND_AFTER_HOURS ago and is STILL waiting (no grade has come back) is
+# sent again. That happens at most MAX_SENDS times in all; after that the submission is left for
+# a person (it shows up as waiting with MAX_SENDS rows in grading_job_sends). On a rejection
 # the job carries the instructor's feedback, or the grader would see the same input as last
 # time and repeat itself. The student's name and the reviewer's name are never sent.
 #
@@ -33,9 +39,17 @@ from app.text_rules import long_text
 
 TOPIC = "grading-jobs"
 
-# The grader's limits, from the table in the contract. The message is checked against them
-# before it is sent, so a job the grader would refuse is never published.
-MESSAGE_LIMITS = {"rubric": 10_000, "student_work": 20_000, "feedback": 10_000}
+# The message limits ARE the route limits (the same constants, not copies of the numbers), so
+# raising a limit in the route code can never leave the sender silently refusing longer, valid
+# text. A test checks that they equal the grader's limits in the contract table, so such a
+# change fails loudly until the contract and the grader are changed too. The message is checked
+# against them before it is sent, so a job the grader would refuse is never published.
+MESSAGE_LIMITS = {"rubric": RUBRIC_MAX, "student_work": TEXT_MAX, "feedback": FEEDBACK_MAX}
+
+# How long a sent job may wait without a grade before it is sent again, and the most times one
+# job (one submission version) is ever sent.
+RESEND_AFTER_HOURS = 6
+MAX_SENDS = 5
 
 log = logging.getLogger("assessment-job-sender")
 
@@ -93,11 +107,13 @@ def identify(row):
 
 
 # In plain English: the submissions whose NEWEST version is waiting for a grade and has no job
-# sent yet, oldest first, leaving out the (submission, version) pairs in "skip". Each row has
+# sent recently, oldest first, leaving out the (submission, version) pairs in "skip". Each row has
 # what the job needs: the submission and version, the assignment and its rubric, the work, and
 # the instructor's feedback (empty on a first submission). Reads only. DISTINCT ON picks the
 # newest version of each submission.
-def fetch_waiting(limit, skip=()):
+def fetch_waiting(limit, skip=(), resend_after_hours=None, max_sends=None):
+    resend_after_hours = RESEND_AFTER_HOURS if resend_after_hours is None else resend_after_hours
+    max_sends = MAX_SENDS if max_sends is None else max_sends
     skip_ids = [pair[0] for pair in skip]
     skip_versions = [pair[1] for pair in skip]
     with connect() as connection:
@@ -108,21 +124,27 @@ def fetch_waiting(limit, skip=()):
             "JOIN assignments a ON a.assignment_id = s.assignment_id "
             "WHERE s.status IN ('submitted', 'rejected') "
             "AND NOT EXISTS (SELECT 1 FROM grading_job_sends g "
-            "                WHERE g.submission_id = s.submission_id AND g.version = s.version) "
+            "                WHERE g.submission_id = s.submission_id AND g.version = s.version "
+            "                AND g.sent_at > now() - make_interval(hours => %s)) "
+            "AND (SELECT count(*) FROM grading_job_sends g "
+            "     WHERE g.submission_id = s.submission_id AND g.version = s.version) < %s "
             "AND NOT EXISTS (SELECT 1 FROM unnest(%s::uuid[], %s::int[]) AS k(id, v) "
             "                WHERE k.id = s.submission_id AND k.v = s.version) "
             "ORDER BY s.created_at, s.submission_id LIMIT %s",
-            (skip_ids, skip_versions, limit),
+            (resend_after_hours, max_sends, skip_ids, skip_versions, limit),
         ).fetchall()
 
 
-# In plain English: notes that Kafka confirmed this job. Adding it twice is harmless.
-def record_job_sent(identity):
+# In plain English: notes that Kafka confirmed this job, at this moment. Each send is its own
+# row, so the job sender can count attempts and see how long ago the last one was. "sent_at"
+# can be given only so tests can record an old send.
+def record_job_sent(identity, sent_at=None):
     submission_id, version = identity
     with connect() as connection:
         connection.execute(
-            "INSERT INTO grading_job_sends (submission_id, version) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-            (submission_id, version),
+            "INSERT INTO grading_job_sends (submission_id, version, sent_at) "
+            "VALUES (%s, %s, COALESCE(%s, now())) ON CONFLICT DO NOTHING",
+            (submission_id, version, sent_at),
         )
 
 

@@ -122,6 +122,25 @@ def test_the_senders_limits_equal_the_contract_table():
     assert job_sender.MESSAGE_LIMITS == CONTRACT_READER_LIMITS
 
 
+# The message limits come FROM the route limits, not from copies of the numbers. So if someone
+# raises a limit in the route code, the message limit rises with it and the test above fails
+# loudly, instead of the sender silently refusing longer (valid) text as invalid.
+def test_the_message_limits_are_the_route_limits_not_copies_of_them(monkeypatch):
+    import importlib
+
+    from app import assignments, reviews, submissions
+
+    try:
+        monkeypatch.setattr(assignments, "RUBRIC_MAX", 123)
+        monkeypatch.setattr(submissions, "TEXT_MAX", 456)
+        monkeypatch.setattr(reviews, "FEEDBACK_MAX", 789)
+        reloaded = importlib.reload(job_sender)
+        assert reloaded.MESSAGE_LIMITS == {"rubric": 123, "student_work": 456, "feedback": 789}
+    finally:
+        monkeypatch.undo()
+        importlib.reload(job_sender)
+
+
 def test_the_sender_never_accepts_more_than_the_grader_does():
     assert RUBRIC_MAX <= CONTRACT_READER_LIMITS["rubric"]
     assert TEXT_MAX <= CONTRACT_READER_LIMITS["student_work"]
@@ -321,3 +340,51 @@ def test_run_sends_jobs_to_the_jobs_topic_through_the_shared_loop():
     )
     assert [topic for topic, _, _ in producer.sent] == ["grading-jobs"]
     assert store.recorded == [(store.rows[0][0], 1)]
+
+
+# ---------- a job that was confirmed but never answered is sent again ----------
+# Recording a job as sent only proves Kafka got it. The grader may later dead-letter it, or
+# the topic may drop it after its 7 days. So a job that has had no answer for a long time is
+# sent again, a limited number of times, and then left for a person.
+
+def hours_ago(hours):
+    from datetime import datetime, timedelta, timezone
+
+    return datetime.now(timezone.utc) - timedelta(hours=hours)
+
+
+@pytest.mark.usefixtures("require_test_database")
+def test_a_job_with_no_answer_for_a_long_time_is_sent_again_but_a_recent_one_is_not():
+    old, _ = new_submission()
+    recent, _ = new_submission()
+    job_sender.record_job_sent((uuid.UUID(old), 1), sent_at=hours_ago(job_sender.RESEND_AFTER_HOURS + 1))
+    job_sender.record_job_sent((uuid.UUID(recent), 1), sent_at=hours_ago(1))
+    found = waiting()
+    assert (old, 1) in found
+    assert (recent, 1) not in found
+
+
+@pytest.mark.usefixtures("require_test_database")
+def test_a_job_is_sent_again_only_a_limited_number_of_times():
+    submission_id, _ = new_submission()
+    for attempt in range(job_sender.MAX_SENDS):
+        assert (submission_id, 1) in waiting(), attempt
+        job_sender.record_job_sent(
+            (uuid.UUID(submission_id), 1),
+            sent_at=hours_ago(job_sender.RESEND_AFTER_HOURS * (job_sender.MAX_SENDS - attempt) + 1),
+        )
+    assert (submission_id, 1) not in waiting()
+
+
+@pytest.mark.usefixtures("require_test_database")
+def test_an_answered_job_is_never_sent_again_however_old():
+    submission_id, _ = new_submission()
+    job_sender.record_job_sent((uuid.UUID(submission_id), 1), sent_at=hours_ago(job_sender.RESEND_AFTER_HOURS * 3))
+    grade(submission_id, 1)
+    assert (submission_id, 1) not in waiting() and (submission_id, 2) not in waiting()
+
+
+@pytest.mark.usefixtures("require_test_database")
+def test_the_resend_rules_are_visible_in_the_constants():
+    assert job_sender.RESEND_AFTER_HOURS >= 1
+    assert 2 <= job_sender.MAX_SENDS <= 10
