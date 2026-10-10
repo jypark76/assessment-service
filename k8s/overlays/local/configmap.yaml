@@ -13,3 +13,5 @@ data:
   DB_NAME: assessment
   # The limited login the service connects with.
   DB_USER: assessment_app
+  # Where Kafka lives inside the cluster. Only the sender uses this.
+  KAFKA_BOOTSTRAP: kafka.kafka.svc.cluster.local:9092

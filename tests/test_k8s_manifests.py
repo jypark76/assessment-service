@@ -29,7 +29,7 @@ CLUSTER_WIDE = {"Namespace"}
 WORKLOADS = {"Deployment", "Job"}
 
 # The pods that must run locked down: a normal user, no extra privileges.
-LOCKED_DOWN = {"assessment-service", "assessment-migrate"}
+LOCKED_DOWN = {"assessment-service", "assessment-sender", "assessment-migrate"}
 
 # Things the pods point at that are NOT in the rendered files on purpose:
 # "assessment-db-init" is made by deploy.sh from db/init.sql, "assessment-db-changelog"
@@ -186,6 +186,7 @@ def real_docs():
 def test_real_overlay_breaks_no_rules(real_docs):
     kinds = {(doc["kind"], doc["metadata"]["name"]) for doc in real_docs}
     assert ("Deployment", "assessment-service") in kinds
+    assert ("Deployment", "assessment-sender") in kinds
     assert ("Deployment", "assessment-db") in kinds
     assert ("NetworkPolicy", "assessment-db-allow-service-only") in kinds
     assert ("Job", "assessment-migrate") in kinds
@@ -225,6 +226,7 @@ def test_the_database_door_lets_the_migration_job_in(real_docs):
         for source in rule["from"]
     ]
     assert "assessment-migrate" in allowed
+    assert "assessment-sender" in allowed
     assert "assessment-service" in allowed
 
 
@@ -248,7 +250,7 @@ def test_the_service_rolls_out_only_after_the_migration(real_docs):
         for doc in real_docs
         if doc["metadata"].get("labels", {}).get("deploy-phase") == "service"
     ]
-    assert labelled == ["assessment-service"]
+    assert sorted(labelled) == ["assessment-sender", "assessment-service"]
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
     everything_else_first = script.index("deploy-phase!=service")
     wait_for_the_migration = script.index("\nwait_for_migration\n")
@@ -493,3 +495,26 @@ def test_the_service_key_comes_from_a_secret_never_from_the_files(real_docs):
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
     assert "kubectl get secret assessment-service-key" in script
     assert "kubectl create secret generic assessment-service-key" in script
+
+
+# In plain English: the sender is its own Deployment from the SAME image as the web service,
+# started with a different command. It listens on no port, takes the database password from
+# the Secret (never from a written value), gets the Kafka address from the shared settings,
+# and runs as exactly one copy (two would only send harmless duplicates).
+def test_the_sender_runs_the_sender_code_from_the_same_image(real_docs):
+    service = next(d for d in real_docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "assessment-service")
+    sender = next(d for d in real_docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "assessment-sender")
+    container = containers_of(sender)[0]
+    assert container["image"] == containers_of(service)[0]["image"]
+    assert container["command"] == ["python", "-m", "app.sender"]
+    assert "ports" not in container
+    assert sender["spec"]["replicas"] == 1
+    assert sender["spec"]["template"]["metadata"]["labels"]["app"] == "assessment-sender"
+    password = {item["name"]: item for item in container["env"]}["DB_PASSWORD"]
+    assert "value" not in password
+    assert password["valueFrom"]["secretKeyRef"] == {"name": "assessment-db", "key": "app-password"}
+    settings = next(d for d in real_docs if d["kind"] == "ConfigMap" and d["metadata"]["name"] == "assessment-service-config")
+    assert settings["data"]["KAFKA_BOOTSTRAP"] == "kafka.kafka.svc.cluster.local:9092"
+    assert container["envFrom"] == [{"configMapRef": {"name": "assessment-service-config"}}]
+    # The sender does not call the service's own routes, so it must not hold the service key.
+    assert "SERVICE_KEYS" not in {item["name"] for item in container["env"]}

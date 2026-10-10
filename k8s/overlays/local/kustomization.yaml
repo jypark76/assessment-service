@@ -10,7 +10,7 @@ resources:
   - networkpolicy.yaml
 images:
   - name: assessment-service
-    newTag: "0.6.1"
+    newTag: "0.7.0"
   # The tool that applies database changes. Pinned, never "latest".
   - name: liquibase/liquibase
     newTag: "4.31.1"
