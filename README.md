@@ -77,8 +77,9 @@ shared contract in `platform/contracts/approved-examples.md`.
 
 Limits: one sender (a second would only create duplicates); a few seconds of delay by design; the tests use
 a pretend Kafka (the real one is proven on the cluster by hand); connections on the laptop are plain, with no
-login. More than a whole batch (50) of permanently invalid approved rows would hold up the ones behind them;
-the field limits make such rows impossible.
+login. A row that cannot be turned into a valid message (the field limits should make that
+impossible) is logged once by its ID and left out until the sender restarts, so it can never hold up the
+rows behind it.
 
 ## The service key
 

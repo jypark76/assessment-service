@@ -69,17 +69,18 @@ def build_message(row):
 
 
 # In plain English: the approved submissions that have not been confirmed as sent, oldest
-# first. A submission has one row per version, and the approved version is the one with the
-# final grade and reasoning. Reads only.
-def fetch_unsent(limit):
+# first, leaving out the ones in "skip" (see send_batch). A submission has one row per
+# version, and the approved version is the one with the final grade and reasoning. Reads only.
+def fetch_unsent(limit, skip=()):
     with connect() as connection:
         return connection.execute(
             "SELECT s.submission_id, s.assignment_id, s.submission_text, s.ai_grade, s.ai_reasoning "
             "FROM submissions s "
             "WHERE s.status = 'approved' "
             "AND NOT EXISTS (SELECT 1 FROM approval_sends a WHERE a.submission_id = s.submission_id) "
+            "AND s.submission_id <> ALL(%s::uuid[]) "
             "ORDER BY s.created_at, s.submission_id LIMIT %s",
-            (limit,),
+            (list(skip), limit),
         ).fetchall()
 
 
@@ -97,7 +98,13 @@ def record_sent(submission_id):
 # proof: it only says how many messages are still queued. A refusal arrives through the
 # delivery callback. If flush leaves messages behind, nothing is recorded, and everything is
 # sent again next round (harmless). Returns how many were confirmed and recorded.
-def send_batch(producer, fetch, record, limit=50):
+#
+# "skipped" holds the IDs of rows that could not be turned into a valid message. They are
+# complained about once, and left out of every later fetch, so a pile of them can never fill
+# the batch and hold up the good rows behind them. It lives in memory only: after a restart
+# they are tried (and complained about) once more, which is what you want after a fix.
+def send_batch(producer, fetch, record, limit=50, skipped=None):
+    skipped = set() if skipped is None else skipped
     confirmed = []
     refused = 0
 
@@ -111,13 +118,14 @@ def send_batch(producer, fetch, record, limit=50):
 
         return callback
 
-    for row in fetch(limit):
+    for row in fetch(limit, skipped):
         submission_id = row[0]
         try:
             key, value = build_message(row)
         except ValueError:
             # Not the error text: it could quote the student's work.
             log.error("submission %s cannot be turned into a valid message; skipped", submission_id)
+            skipped.add(submission_id)
             continue
         producer.produce(TOPIC, key=key, value=value, on_delivery=make_callback(submission_id))
 
@@ -138,8 +146,9 @@ def send_batch(producer, fetch, record, limit=50):
 # so it never hammers the database or a struggling Kafka. The pieces are parameters so tests
 # can pass pretend ones.
 def run(producer, fetch, record, should_stop=lambda: False, pause=5, sleep=time.sleep, limit=50):
+    skipped = set()
     while not should_stop():
-        if send_batch(producer, fetch, record, limit=limit) == 0:
+        if send_batch(producer, fetch, record, limit=limit, skipped=skipped) == 0:
             sleep(pause)
 
 

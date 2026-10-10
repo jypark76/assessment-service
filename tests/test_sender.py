@@ -138,16 +138,16 @@ class FakeStore:
         self.rows = list(rows)
         self.recorded = []
 
-    def fetch(self, limit):
-        waiting = [r for r in self.rows if r[0] not in self.recorded]
+    def fetch(self, limit, skip=()):
+        waiting = [r for r in self.rows if r[0] not in self.recorded and r[0] not in skip]
         return waiting[:limit]
 
     def record(self, submission_id):
         self.recorded.append(submission_id)
 
 
-def batch(store, producer, limit=50):
-    return send_batch(producer, store.fetch, store.record, limit=limit)
+def batch(store, producer, limit=50, skipped=None):
+    return send_batch(producer, store.fetch, store.record, limit=limit, skipped=skipped if skipped is not None else set())
 
 
 def test_confirmed_messages_go_to_the_agreed_topic_and_are_recorded():
@@ -190,6 +190,30 @@ def test_a_bad_row_is_skipped_and_does_not_block_the_others():
     producer = FakeProducer()
     assert batch(store, producer) == 1
     assert store.recorded == [good[0]]
+
+
+# Without this, a full batch of unbuildable rows would be fetched, skipped and fetched again
+# forever, and every approval behind them would never be reached.
+def test_a_pile_of_unbuildable_rows_cannot_hold_up_the_good_ones_behind_them():
+    bad = [row(ai_grade="") for _ in range(3)]
+    good = row()
+    store = FakeStore(bad + [good])
+    skipped = set()
+    producer = FakeProducer()
+    assert batch(store, producer, limit=3, skipped=skipped) == 0  # the whole batch was bad
+    assert skipped == {r[0] for r in bad}
+    assert batch(store, producer, limit=3, skipped=skipped) == 1  # next round reaches the good one
+    assert store.recorded == [good[0]]
+
+
+def test_a_bad_row_is_complained_about_once_not_every_round(caplog):
+    bad = row(ai_grade="")
+    store = FakeStore([bad])
+    skipped = set()
+    with caplog.at_level("ERROR"):
+        for _ in range(3):
+            batch(store, FakeProducer(), skipped=skipped)
+    assert caplog.text.count(str(bad[0])) == 1
 
 
 def test_a_bad_row_is_logged_by_id_only_never_with_student_text(caplog):
@@ -302,3 +326,11 @@ def test_the_oldest_waiting_submission_comes_first():
     second, _ = make_submission(["graded", "approved"])
     order = [str(r[0]) for r in sender.fetch_unsent(10_000) if str(r[0]) in (first, second)]
     assert order == [first, second]
+
+
+@pytest.mark.usefixtures("require_test_database")
+def test_a_skipped_submission_is_left_out_of_the_waiting_list():
+    first, _ = make_submission(["graded", "approved"])
+    second, _ = make_submission(["graded", "approved"])
+    left = {str(r[0]) for r in sender.fetch_unsent(10_000, skip={uuid.UUID(first)})}
+    assert first not in left and second in left
