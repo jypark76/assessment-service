@@ -26,6 +26,14 @@ class SubmissionMovedOn(Exception):
     pass
 
 
+# In plain English: raised when the grader names a version the submission has never had (a
+# number higher than its newest). That is never a normal race, it means the grader copied back
+# the wrong number. It is a kind of "moved on", so the web route still answers 409 as before, but
+# the results consumer can tell it apart and send it to a person instead of dropping it.
+class VersionDoesNotExist(SubmissionMovedOn):
+    pass
+
+
 # In plain English: raised when the submission is not waiting for a grade. It is either
 # already graded and waiting for an instructor, or already approved, which is final.
 class NotWaitingForGrade(Exception):
@@ -100,6 +108,8 @@ def _try_record(submission_id, grade):
                 return _reply(submission_id, row), False
 
         latest_version, latest_status = history[-1][0], history[-1][1]
+        if grade.based_on_version > latest_version:
+            raise VersionDoesNotExist()
         if latest_version != grade.based_on_version:
             raise SubmissionMovedOn()
         if latest_status not in ("submitted", "rejected"):

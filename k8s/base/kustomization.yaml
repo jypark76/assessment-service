@@ -8,5 +8,6 @@ resources:
   - deployment.yaml
   - sender-deployment.yaml
   - job-sender-deployment.yaml
+  - results-consumer-deployment.yaml
   - service.yaml
   - migrate-job.yaml
