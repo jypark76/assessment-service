@@ -67,6 +67,7 @@ def make_submission(assignment_id, **change):
 # (assignment, submission, grade, review), comes back exactly as sent and is never run.
 # The control: the same cycle with plain text works, so a refusal would mean something other than
 # the hostile text broke it.
+@pytest.mark.owasp("A05", 74, 76, 89, 99)
 def test_hostile_text_goes_through_the_whole_cycle_and_is_read_back_exactly():
     control = make_assignment()
     assert control.status_code == 201
@@ -103,6 +104,7 @@ def test_hostile_text_goes_through_the_whole_cycle_and_is_read_back_exactly():
 
 # In plain English: text that looks like a command did not run. Both tables are still there, the
 # earlier rows are still there, and nothing was deleted.
+@pytest.mark.owasp("A05", 74, 76, 89, 99)
 def test_destructive_looking_text_does_not_destroy_anything():
     keeper = make_assignment(title=f"Keeper {uuid.uuid4()}").json()["assignment_id"]
     assert make_submission(keeper, submission_text="Keep me.")[0].status_code == 201
@@ -118,6 +120,7 @@ def test_destructive_looking_text_does_not_destroy_anything():
 # In plain English: a "title already used" check compares the real text. An "always true" trick as a
 # title is just a title: a second assignment with a different title is not blocked, and the same
 # title is refused as a normal 409.
+@pytest.mark.owasp("A05", 74, 76, 89, 99)
 def test_a_trick_title_is_just_a_title():
     title = f"x' OR '1'='1 {uuid.uuid4()}"
     assert make_assignment(title=title).status_code == 201
@@ -127,6 +130,7 @@ def test_a_trick_title_is_just_a_title():
 
 # In plain English: a list filter cannot be widened. A hostile status or limit is refused as bad input,
 # and a list for one assignment never shows another assignment's submissions.
+@pytest.mark.owasp("A05", 74, 76, 89, 99)
 def test_hostile_filters_are_refused_and_lists_do_not_widen():
     holder = make_assignment().json()["assignment_id"]
     other = make_assignment().json()["assignment_id"]
@@ -149,6 +153,7 @@ def test_hostile_filters_are_refused_and_lists_do_not_widen():
 # In plain English: every place that must be a real ID refuses anything else (a 422 that never repeats
 # what was sent), so a command cannot be smuggled in through a path, a body or a query.
 @pytest.mark.parametrize("payload", ["11111111-1111-1111-1111-111111111111' OR '1'='1", "'; DROP TABLE submissions; --", "1 OR 1=1"])
+@pytest.mark.owasp("A05", 74, 76, 89, 99)
 def test_ids_that_are_not_real_uuids_are_refused_without_being_repeated(payload):
     replies = [
         client.get(f"/assignments/{payload}"),

@@ -61,6 +61,7 @@ def assert_json_reply(response):
     return response.json()  # decodes, or the test fails
 
 
+@pytest.mark.owasp("A05", 115, 116, 159)
 def test_error_replies_are_labelled_json_and_decode():
     for reply in (
         bare.get("/assignments", params={"limit": "x"}),
@@ -73,6 +74,7 @@ def test_error_replies_are_labelled_json_and_decode():
 
 
 @pytest.mark.usefixtures("require_test_database")
+@pytest.mark.owasp("A05", 115, 116, 159)
 def test_success_replies_are_labelled_json_and_html_like_text_stays_data():
     made = make_assignment(rubric="<script>alert(1)</script>")
     assert made.status_code == 201
@@ -88,6 +90,7 @@ def test_success_replies_are_labelled_json_and_html_like_text_stays_data():
 
 @pytest.mark.usefixtures("require_test_database")
 @pytest.mark.parametrize("special", SPECIALS)
+@pytest.mark.owasp("A05", 115, 116, 159)
 def test_unusual_characters_are_stored_exactly_or_refused_never_a_crash(special):
     made = make_assignment(rubric=special, title=f"{special} {uuid.uuid4()}")
     assert made.status_code in (201, 422), (special, made.status_code, made.text)
@@ -107,6 +110,7 @@ def test_unusual_characters_are_stored_exactly_or_refused_never_a_crash(special)
 
 
 @pytest.mark.usefixtures("require_test_database")
+@pytest.mark.owasp("A05", 115, 116, 159)
 def test_a_half_written_character_and_a_null_are_refused_with_a_normal_422():
     assignment_id = make_assignment().json()["assignment_id"]  # control: the route works
     for escaped in ('"\\ud800"', '"a\\u0000b"', '"\\udfff"'):
@@ -116,6 +120,7 @@ def test_a_half_written_character_and_a_null_are_refused_with_a_normal_422():
         assert_json_reply(reply)
 
 
+@pytest.mark.owasp("A05", 115, 116, 159)
 def test_a_request_that_is_not_valid_utf8_or_not_json_is_a_client_error_not_a_crash():
     for raw in (b'{"title": "\xff\xfe"}', b"{not json", b"", b"[1,2,3]", b'"just a string"'):
         reply = bare.post("/assignments", content=raw, headers={"Content-Type": "application/json"})
@@ -138,6 +143,7 @@ def strict_loads(raw):
     return json.loads(raw.decode("utf-8"), object_pairs_hook=no_repeats, parse_constant=no_special)
 
 
+@pytest.mark.owasp("A05", 115, 116, 159)
 def test_what_the_senders_write_is_plain_unambiguous_json():
     for special in SPECIALS:
         _, approved = build_approved((uuid.uuid4(), uuid.uuid4(), special, "A", special))
@@ -152,6 +158,7 @@ def message(text):
     return data["submission_id"].encode(), text.replace("SUB", data["submission_id"]).encode()
 
 
+@pytest.mark.owasp("A05", 115, 116, 159)
 def test_a_result_that_repeats_a_field_is_refused_as_invalid_json():
     for text in (
         '{"schema_version":1,"submission_id":"SUB","based_on_version":1,"ai_grade":"A","ai_grade":"F","ai_reasoning":"r"}',
@@ -165,6 +172,7 @@ def test_a_result_that_repeats_a_field_is_refused_as_invalid_json():
     assert handle_message(key, control, record=recorder_new) == ("saved", None)
 
 
+@pytest.mark.owasp("A05", 115, 116, 159)
 def test_a_result_with_nan_or_infinity_is_refused_as_invalid_json():
     for token in ("NaN", "Infinity", "-Infinity"):
         key, value = message('{"schema_version":1,"submission_id":"SUB","based_on_version":%s,"ai_grade":"A","ai_reasoning":"r"}' % token)
@@ -174,6 +182,7 @@ def test_a_result_with_nan_or_infinity_is_refused_as_invalid_json():
 # A half-written character or a null inside a Kafka message must be refused as a bad field. If it slipped
 # through, recording it would crash the consumer and the same message would crash it again after every
 # restart.
+@pytest.mark.owasp("A05", 115, 116, 159)
 def test_a_half_written_character_or_a_null_in_a_result_is_a_bad_field_not_a_crash():
     for escaped in ("a\\ud800b", "\\udfff", "a\\u0000b"):
         key, value = message('{"schema_version":1,"submission_id":"SUB","based_on_version":1,"ai_grade":"A","ai_reasoning":"%s"}' % escaped)

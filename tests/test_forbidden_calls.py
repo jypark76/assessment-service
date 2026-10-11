@@ -12,6 +12,8 @@
 import ast
 from pathlib import Path
 
+import pytest
+
 APP = Path(__file__).resolve().parent.parent / "app"
 
 # Modules that are never imported at all: they run commands, load code or objects from data, or
@@ -87,6 +89,7 @@ def app_files():
 
 
 # In plain English: the real check. Every Python file in app/ must be clean.
+@pytest.mark.owasp("A05", 77, 78, 88, 94, 95, 470)
 def test_application_code_contains_no_forbidden_calls():
     files = app_files()
     assert files, "no application files were found to check"
@@ -99,6 +102,7 @@ def test_application_code_contains_no_forbidden_calls():
 # In plain English: the check must really be looking at the application. If the folder were missing or
 # empty the test above would have nothing to complain about, so this makes sure the files it covers
 # are the ones we expect to exist.
+@pytest.mark.owasp("A05", 77, 78, 88, 94, 95, 470)
 def test_the_check_covers_the_real_application_files():
     names = {path.name for path in app_files()}
     assert {"main.py", "auth.py", "db.py"} <= names
@@ -146,16 +150,19 @@ GOOD_PROGRAMS = {
 }
 
 
+@pytest.mark.owasp("A05", 77, 78, 88, 94, 95, 470)
 def test_every_bad_program_is_caught():
     for label, source in BAD_PROGRAMS.items():
         assert find_forbidden(source), f"not caught: {label}"
 
 
+@pytest.mark.owasp("A05", 77, 78, 88, 94, 95, 470)
 def test_every_good_program_passes():
     for label, source in GOOD_PROGRAMS.items():
         assert find_forbidden(source) == [], f"wrongly flagged: {label}: {find_forbidden(source)}"
 
 
+@pytest.mark.owasp("A05", 77, 78, 88, 94, 95, 470)
 def test_a_problem_names_the_line():
     problems = find_forbidden("x = 1\ny = 2\neval('1')\n", "app/x.py")
     assert problems == ["app/x.py:3: calls forbidden built-in 'eval'"]

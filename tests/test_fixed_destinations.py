@@ -13,6 +13,8 @@
 import ast
 from pathlib import Path
 
+import pytest
+
 APP = Path(__file__).resolve().parent.parent / "app"
 
 # Modules that open connections to other machines. This service talks only to its database (through
@@ -57,6 +59,7 @@ def app_files():
 
 
 # In plain English: the real check. Every Python file in app/ must be clean.
+@pytest.mark.owasp("A05", 610)
 def test_application_code_reaches_only_fixed_destinations():
     files = app_files()
     assert files, "no application files were found to check"
@@ -68,6 +71,7 @@ def test_application_code_reaches_only_fixed_destinations():
 
 # In plain English: the Kafka topic names themselves are fixed words in the code and match the written
 # contracts, so a topic can only ever be one we agreed.
+@pytest.mark.owasp("A05", 610)
 def test_the_topic_names_are_fixed_words():
     expected = {
         "results_consumer.py": ['TOPIC = "grading-results"', 'DEAD_LETTER_TOPIC = "grading-results.dead-letter"'],
@@ -80,6 +84,7 @@ def test_the_topic_names_are_fixed_words():
             assert line in text, (name, line)
 
 
+@pytest.mark.owasp("A05", 610)
 def test_the_check_covers_the_real_application_files():
     names = {path.name for path in app_files()}
     assert {"main.py", "auth.py", "db.py", "results_consumer.py", "sender.py", "job_sender.py"} <= names
@@ -118,11 +123,13 @@ GOOD_PROGRAMS = {
 }
 
 
+@pytest.mark.owasp("A05", 610)
 def test_every_bad_program_is_caught():
     for label, source in BAD_PROGRAMS.items():
         assert find_unfixed_destinations(source), f"not caught: {label}"
 
 
+@pytest.mark.owasp("A05", 610)
 def test_every_good_program_passes():
     for label, source in GOOD_PROGRAMS.items():
         assert find_unfixed_destinations(source) == [], f"wrongly flagged: {label}: {find_unfixed_destinations(source)}"

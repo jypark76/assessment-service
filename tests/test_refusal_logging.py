@@ -33,6 +33,7 @@ def refusals(caplog):
     return [r for r in caplog.records if r.name == auth.LOGGER_NAME]
 
 
+@pytest.mark.owasp("A09", 221, 223, 778)
 def test_each_kind_of_refusal_is_logged_once_with_its_reason(caplog):
     cases = {
         "missing": {},

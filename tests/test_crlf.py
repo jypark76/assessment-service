@@ -55,6 +55,7 @@ def assert_headers_clean(response):
 
 # ---------- Part 1: reply headers ----------
 
+@pytest.mark.owasp("A05", 93, 113)
 def test_line_breaks_in_requests_never_reach_reply_headers_on_the_refusal_paths():
     some_id = "11111111-1111-4111-8111-111111111111"
     replies = [
@@ -108,6 +109,7 @@ def assert_logs_clean(caplog):
         assert "Set-Cookie" not in line, repr(line)
 
 
+@pytest.mark.owasp("A05", 93, 113)
 def test_the_results_consumer_never_puts_line_breaks_or_input_into_the_log(caplog):
     from app.grades import SubmissionMovedOn
 
@@ -142,6 +144,7 @@ def test_the_key_as_shown_in_a_log_line_never_carries_input(raw):
     assert shown == "unreadable" or len(shown) == 36
 
 
+@pytest.mark.owasp("A09", 117)
 def test_the_senders_never_put_line_breaks_or_student_text_into_the_log(caplog):
     class Store:
         def __init__(self, rows):
