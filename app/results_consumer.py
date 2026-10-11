@@ -56,13 +56,32 @@ class GradingResultMessage(NewGrade):
     submission_id: uuid.UUID
 
 
+# In plain English: reads a message's JSON strictly. A field named twice is refused, because different
+# programs keep different copies (some the first, some the last) and a sender and a reader could then
+# disagree about what the message says. NaN and Infinity are refused too: they are not JSON, Python
+# accepts them anyway, and other programs do not.
+def _no_repeated_fields(pairs):
+    names = [name for name, _ in pairs]
+    if len(names) != len(set(names)):
+        raise ValueError("a field is repeated")
+    return dict(pairs)
+
+
+def _no_special_numbers(token):
+    raise ValueError("NaN and Infinity are not JSON")
+
+
+def _read_json(value):
+    return json.loads(value.decode("utf-8"), object_pairs_hook=_no_repeated_fields, parse_constant=_no_special_numbers)
+
+
 # In plain English: decides what to do with one message and reports the outcome as a pair like
 # ("saved", None) or ("dead_letter", "invalid_field"). It raises for temporary trouble (such as
 # the database being down) so the caller does not commit. "record" is a parameter only so tests
 # can pass a pretend one.
 def handle_message(key, value, record=record_grade):
     try:
-        data = json.loads(value.decode("utf-8"))
+        data = _read_json(value)
     except (AttributeError, UnicodeDecodeError, ValueError, RecursionError):
         return "dead_letter", "invalid_json"
     if not isinstance(data, dict):
