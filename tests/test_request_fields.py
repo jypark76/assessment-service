@@ -81,6 +81,7 @@ def test_no_body_at_all_is_refused(route):
 
 @pytest.mark.owasp("A10", 235)
 @pytest.mark.parametrize("route", sorted(ROUTES))
+@pytest.mark.owasp("A08", 915)
 def test_every_model_forbids_extra_fields(route):
     _, model, _ = ROUTES[route]
     assert model.model_config.get("extra") == "forbid"
