@@ -4,6 +4,31 @@
 # not listed here. So deleting or skipping a guardrail test cannot go unnoticed, and a new claim has to
 # be written down on purpose. Each line is: category, CWE number, then the name for people to read.
 # Add a line here in the same change that adds the tagged test.
+A01 22 Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')
+A01 23 Relative Path Traversal
+A01 36 Absolute Path Traversal
+A01 59 Improper Link Resolution Before File Access ('Link Following')
+A01 61 UNIX Symbolic Link (Symlink) Following
+A01 65 Windows Hard Link
+A01 219 Storage of File with Sensitive Data Under Web Root
+A01 276 Incorrect Default Permissions
+A01 377 Insecure Temporary File
+A01 379 Creation of Temporary File in Directory with Insecure Permissions
+A01 424 Improper Protection of Alternate Path
+A01 425 Direct Request ('Forced Browsing')
+A01 441 Unintended Proxy or Intermediary ('Confused Deputy')
+A01 497 Exposure of Sensitive System Information to an Unauthorized Control Sphere
+A01 538 Insertion of Sensitive Information into Externally-Accessible File or Directory
+A01 540 Inclusion of Sensitive Information in Source Code
+A01 548 Exposure of Information Through Directory Listing
+A01 552 Files or Directories Accessible to External Parties
+A01 601 URL Redirection to Untrusted Site ('Open Redirect')
+A01 615 Inclusion of Sensitive Information in Source Code Comments
+A01 668 Exposure of Resource to Wrong Sphere
+A01 732 Incorrect Permission Assignment for Critical Resource
+A01 749 Exposed Dangerous Method or Function
+A01 862 Missing Authorization
+A01 918 Server-Side Request Forgery (SSRF)
 A03 447 Use of Obsolete Function
 A03 1035 2017 Top 10 A9: Using Components with Known Vulnerabilities
 A03 1104 Use of Unmaintained Third Party Components
