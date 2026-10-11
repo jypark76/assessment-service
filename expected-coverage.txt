@@ -55,6 +55,25 @@ A05 116 Improper Encoding or Escaping of Output
 A05 159 Improper Handling of Invalid Use of Special Elements
 A05 470 Use of Externally-Controlled Input to Select Classes or Code ('Unsafe Reflection')
 A05 610 Externally Controlled Reference to a Resource in Another Sphere
+A07 258 Empty Password in Configuration File
+A07 259 Use of Hard-coded Password
+A07 287 Improper Authentication
+A07 288 Authentication Bypass Using an Alternate Path or Channel
+A07 289 Authentication Bypass by Alternate Name
+A07 290 Authentication Bypass by Spoofing
+A07 291 Reliance on IP Address for Authentication
+A07 293 Using Referer Field for Authentication
+A07 302 Authentication Bypass by Assumed-Immutable Data
+A07 303 Incorrect Implementation of Authentication Algorithm
+A07 304 Missing Critical Step in Authentication
+A07 305 Authentication Bypass by Primary Weakness
+A07 306 Missing Authentication for Critical Function
+A07 350 Reliance on Reverse DNS Resolution for a Security-Critical Action
+A07 798 Use of Hard-coded Credentials
+A07 941 Incorrectly Specified Destination in a Communication Channel
+A07 1391 Use of Weak Credentials
+A07 1392 Use of Default Credentials
+A07 1393 Use of Default Password
 A09 117 Improper Output Neutralization for Logs
 A09 221 Information Loss of Omission
 A09 223 Omission of Security-relevant Information

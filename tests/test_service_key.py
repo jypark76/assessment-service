@@ -37,6 +37,7 @@ def call(method, path, headers=None):
 
 
 @pytest.mark.owasp("A01", 862, 749)
+@pytest.mark.owasp("A07", 306)
 def test_the_route_list_is_not_empty_and_includes_the_open_ones():
     templates = {template for _, _, template in all_routes()}
     assert OPEN_PATHS <= templates
@@ -64,6 +65,7 @@ BAD_HEADERS = {
 
 
 @pytest.mark.owasp("A01", 862, 424, 425)
+@pytest.mark.owasp("A07", 287, 304, 305, 306)
 def test_every_protected_route_refuses_every_kind_of_bad_header():
     for method, path in protected_routes():
         for name, headers in BAD_HEADERS.items():
@@ -80,6 +82,7 @@ def test_the_refusal_is_identical_for_every_failure_and_repeats_nothing():
     assert OTHER_KEY not in call("GET", "/assignments", sent).text
 
 
+@pytest.mark.owasp("A07", 303)
 def test_the_right_key_gets_past_the_guard():
     headers = {"Authorization": f"Bearer {TEST_KEY}"}
     # An empty body is turned away by the normal input checks (422), which proves the
@@ -89,6 +92,7 @@ def test_the_right_key_gets_past_the_guard():
     assert call("POST", "/assignments", {"Authorization": f"bearer {TEST_KEY}"}).status_code == 422
 
 
+@pytest.mark.owasp("A07", 303)
 def test_several_keys_can_be_valid_at_once_so_a_key_can_be_rotated(monkeypatch):
     monkeypatch.setenv("SERVICE_KEYS", f"{OTHER_KEY}, {TEST_KEY}")
     assert call("POST", "/assignments", {"Authorization": f"Bearer {OTHER_KEY}"}).status_code == 422
@@ -98,6 +102,7 @@ def test_several_keys_can_be_valid_at_once_so_a_key_can_be_rotated(monkeypatch):
 
 
 @pytest.mark.owasp("A10", 636)
+@pytest.mark.owasp("A07", 1392, 1393)
 def test_with_no_key_configured_the_service_refuses_instead_of_opening(monkeypatch):
     for value in (None, "", "   ", ",", "short"):
         if value is None:
@@ -112,6 +117,7 @@ def test_with_no_key_configured_the_service_refuses_instead_of_opening(monkeypat
     assert call("GET", "/health").status_code == 200
 
 
+@pytest.mark.owasp("A07", 1391)
 def test_a_short_key_is_not_accepted_even_if_it_matches(monkeypatch):
     monkeypatch.setenv("SERVICE_KEYS", "short")
     assert call("GET", "/assignments", {"Authorization": "Bearer short"}).status_code == 503

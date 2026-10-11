@@ -147,6 +147,7 @@ def test_a_badly_formed_name_and_an_unknown_name_are_reported_as_different_probl
 
 
 @pytest.mark.owasp("A01", 284, 285, 863)
+@pytest.mark.owasp("A07", 1391)
 def test_a_key_that_is_too_short_is_ignored_not_used():
     callers, _ = auth.parse_callers(f"frontend-service:short,report-viewer:{VIEWER_KEY}")
     assert [name for name, _ in callers] == ["report-viewer"]
@@ -192,6 +193,7 @@ def test_the_legacy_plain_key_keeps_full_access_until_it_is_removed(fresh):
 
 
 @pytest.mark.owasp("A01", 284, 285, 863)
+@pytest.mark.owasp("A07", 290, 302)
 def test_a_caller_cannot_borrow_another_callers_rights_by_saying_so(fresh):
     for header in ("X-Caller", "X-Forwarded-User", "Caller", "X-Service-Name"):
         reply = call("POST /assignments", VIEWER_KEY, {header: "frontend-service"})
@@ -199,6 +201,7 @@ def test_a_caller_cannot_borrow_another_callers_rights_by_saying_so(fresh):
 
 
 @pytest.mark.owasp("A01", 284, 285, 863)
+@pytest.mark.owasp("A07", 287)
 def test_the_key_decides_the_caller_and_a_key_from_nowhere_decides_nothing():
     assert call("GET /assignments", "not-a-configured-key-0123456789abcdef0123").status_code == 401
     assert call("POST /assignments", VIEWER_KEY).status_code == 403
@@ -250,6 +253,7 @@ def test_forbidden_attempts_share_the_flood_limit_with_other_refusals(caplog):
 
 
 @pytest.mark.owasp("A01", 284, 285, 863)
+@pytest.mark.owasp("A07", 303)
 def test_every_configured_key_is_compared_so_timing_does_not_reveal_which_one_matched(monkeypatch):
     seen = []
     real = auth.hmac.compare_digest
