@@ -156,6 +156,7 @@ def test_a_key_that_is_too_short_is_ignored_not_used():
 # ---------- Which caller may use which route ----------
 
 @pytest.mark.owasp("A01", 284, 285, 863)
+@pytest.mark.owasp("A06", 1125)
 def test_the_routes_that_exist_are_exactly_the_routes_these_tests_know_about():
     assert real_route_keys() == EXPECTED_ROUTES
 
@@ -172,6 +173,7 @@ def test_the_real_permission_table_matches_the_written_expectations():
 
 @pytest.mark.owasp("A01", 284, 285, 863)
 @pytest.mark.parametrize("caller,key", [("frontend-service", FRONT_KEY), ("report-viewer", VIEWER_KEY)])
+@pytest.mark.owasp("A06", 266, 269, 286)
 def test_every_caller_gets_exactly_the_routes_it_is_allowed_on_every_route(caller, key):
     wrong = []
     for route_key in sorted(EXPECTED_ROUTES):
@@ -194,6 +196,7 @@ def test_the_legacy_plain_key_keeps_full_access_until_it_is_removed(fresh):
 
 @pytest.mark.owasp("A01", 284, 285, 863)
 @pytest.mark.owasp("A07", 290, 302)
+@pytest.mark.owasp("A06", 266, 269, 472, 807)
 def test_a_caller_cannot_borrow_another_callers_rights_by_saying_so(fresh):
     for header in ("X-Caller", "X-Forwarded-User", "Caller", "X-Service-Name"):
         reply = call("POST /assignments", VIEWER_KEY, {header: "frontend-service"})
@@ -202,6 +205,7 @@ def test_a_caller_cannot_borrow_another_callers_rights_by_saying_so(fresh):
 
 @pytest.mark.owasp("A01", 284, 285, 863)
 @pytest.mark.owasp("A07", 287)
+@pytest.mark.owasp("A06", 454, 472, 807)
 def test_the_key_decides_the_caller_and_a_key_from_nowhere_decides_nothing():
     assert call("GET /assignments", "not-a-configured-key-0123456789abcdef0123").status_code == 401
     assert call("POST /assignments", VIEWER_KEY).status_code == 403

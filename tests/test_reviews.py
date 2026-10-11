@@ -225,6 +225,7 @@ def test_a_different_review_for_an_already_reviewed_version_is_refused():
 # A new submission with no grade, one already rejected (it needs a new grade first) and
 # one already approved (final) are each refused with fixed wording, and nothing is added.
 # A graded submission is the control and works.
+@pytest.mark.owasp("A06", 841)
 def test_only_a_graded_submission_can_be_reviewed():
     assert review(graded_submission()).status_code == 201
 

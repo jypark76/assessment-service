@@ -78,6 +78,7 @@ def app_files():
 
 @pytest.mark.owasp("A07", 291, 293, 350, 258, 1392, 1393)
 @pytest.mark.owasp("A04", 321)
+@pytest.mark.owasp("A06", 454, 472, 598, 807)
 def test_authentication_uses_only_the_key_and_no_secret_setting_has_a_default():
     files = app_files()
     assert files, "no application files were found to check"
@@ -181,6 +182,7 @@ def spellings(path):
 
 
 @pytest.mark.owasp("A07", 288, 289)
+@pytest.mark.owasp("A06", 419, 656)
 def test_every_spelling_of_a_protected_address_is_refused_without_a_key():
     wrong = []
     for path in protected_paths():

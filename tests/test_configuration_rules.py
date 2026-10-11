@@ -93,6 +93,7 @@ def app_files():
 # ---------- The real code ----------
 
 @pytest.mark.owasp("A02", 15, 526, 942, 611, 776)
+@pytest.mark.owasp("A06", 454)
 def test_the_application_code_keeps_its_configuration_fixed_and_opens_no_cross_domain_or_xml_doors():
     files = app_files()
     assert files, "no application files were found to check"

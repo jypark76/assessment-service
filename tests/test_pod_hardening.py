@@ -114,6 +114,7 @@ def real_documents():
 # ---------- The real files ----------
 
 @pytest.mark.owasp("A02", 16, 526)
+@pytest.mark.owasp("A06", 266, 269, 316)
 def test_every_pod_this_repo_deploys_is_locked_down():
     documents = real_documents()
     workloads = [d for d in documents if isinstance(d, dict) and d.get("kind") in WORKLOADS]

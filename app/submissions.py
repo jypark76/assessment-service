@@ -125,7 +125,7 @@ def list_submissions(status: str, assignment_id, limit: int):
         "NOT EXISTS (SELECT 1 FROM submissions newer "
         "WHERE newer.submission_id = s.submission_id AND newer.version > s.version)",
     ]
-    params = [status]
+    params: list = [status]
     if assignment_id is not None:
         conditions.append("s.assignment_id = %s")
         params.append(assignment_id)

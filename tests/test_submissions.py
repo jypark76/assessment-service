@@ -299,6 +299,7 @@ def test_different_ids_are_different_submissions_even_with_identical_content():
 # In plain English: the API offers no way to change or delete a submission. Reading it
 # works (the control), and every attempt to change or remove it is turned away with
 # "method not allowed".
+@pytest.mark.owasp("A06", 642, 841)
 def test_there_is_no_way_to_change_or_remove_a_submission():
     body = good_body(new_assignment())
     assert submit(body).status_code == 201
