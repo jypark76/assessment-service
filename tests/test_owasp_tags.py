@@ -86,6 +86,14 @@ def test_every_real_tag_in_this_repo_is_valid():
 # These run pytest itself on a throwaway project that uses this repo's real conftest.py, pytest.ini and
 # tag checker, so they prove the hook is wired in and a misspelled marker is refused.
 
+# In plain English: this run's own settings with the pipeline's coverage variables removed, so a sample
+# run can never switch on the coverage check or write into the real run's summary page.
+def clean_environment():
+    import os
+
+    return {k: v for k, v in os.environ.items() if k not in ("OWASP_ENFORCE_COVERAGE", "GITHUB_STEP_SUMMARY")}
+
+
 def run_pytest_on(tmp_path, test_text):
     import shutil
     import subprocess
@@ -97,8 +105,9 @@ def run_pytest_on(tmp_path, test_text):
     shutil.copy(here.parent / "pytest.ini", tmp_path / "pytest.ini")
     shutil.copy(here / "conftest.py", tmp_path / "tests" / "conftest.py")
     shutil.copy(here / "owasp_tags.py", tmp_path / "tests" / "owasp_tags.py")
+    shutil.copy(here / "owasp_report.py", tmp_path / "tests" / "owasp_report.py")
     (tmp_path / "tests" / "test_sample.py").write_text(test_text, encoding="utf-8")
-    return subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"], cwd=tmp_path, capture_output=True, text=True, timeout=120)
+    return subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"], cwd=tmp_path, capture_output=True, text=True, timeout=120, env=clean_environment())
 
 
 GOOD_SAMPLE = 'import pytest\n\n@pytest.mark.owasp("A05", 89)\ndef test_a():\n    pass\n'

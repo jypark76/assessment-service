@@ -1,0 +1,28 @@
+# In plain English: the OWASP weaknesses (CWEs) this repo claims its tests prove are stopped.
+#
+# The pipeline fails if a CWE listed here has no passing test, or if a test is tagged with a CWE that is
+# not listed here. So deleting or skipping a guardrail test cannot go unnoticed, and a new claim has to
+# be written down on purpose. Each line is: category, CWE number, then the name for people to read.
+# Add a line here in the same change that adds the tagged test.
+A05 20 Improper Input Validation
+A05 74 Improper Neutralization of Special Elements in Output Used by a Downstream Component ('Injection')
+A05 76 Improper Neutralization of Equivalent Special Elements
+A05 77 Improper Neutralization of Special Elements used in a Command ('Command Injection')
+A05 78 Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')
+A05 88 Improper Neutralization of Argument Delimiters in a Command ('Argument Injection')
+A05 89 Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')
+A05 93 Improper Neutralization of CRLF Sequences ('CRLF Injection')
+A05 94 Improper Control of Generation of Code ('Code Injection')
+A05 95 Improper Neutralization of Directives in Dynamically Evaluated Code ('Eval Injection')
+A05 99 Improper Control of Resource Identifiers ('Resource Injection')
+A05 113 Improper Neutralization of CRLF Sequences in HTTP Headers ('HTTP Response Splitting')
+A05 115 Misinterpretation of Output
+A05 116 Improper Encoding or Escaping of Output
+A05 159 Improper Handling of Invalid Use of Special Elements
+A05 470 Use of Externally-Controlled Input to Select Classes or Code ('Unsafe Reflection')
+A05 610 Externally Controlled Reference to a Resource in Another Sphere
+A09 117 Improper Output Neutralization for Logs
+A09 221 Information Loss of Omission
+A09 223 Omission of Security-relevant Information
+A09 532 Insertion of Sensitive Information into Log File
+A09 778 Insufficient Logging
