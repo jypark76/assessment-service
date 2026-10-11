@@ -47,6 +47,34 @@ A03 1104 Use of Unmaintained Third Party Components
 A03 1329 Reliance on Component That is Not Updateable
 A03 1357 Reliance on Insufficiently Trustworthy Component
 A03 1395 Dependency on Vulnerable Third-Party Component
+A04 261 Weak Encoding for Password
+A04 296 Improper Following of a Certificate's Chain of Trust
+A04 320 Key Management Errors (Prohibited)
+A04 321 Use of Hard-coded Cryptographic Key
+A04 323 Reusing a Nonce, Key Pair in Encryption
+A04 325 Missing Required Cryptographic Step
+A04 326 Inadequate Encryption Strength
+A04 327 Use of a Broken or Risky Cryptographic Algorithm
+A04 328 Reversible One-Way Hash
+A04 329 Not Using a Random IV with CBC Mode
+A04 330 Use of Insufficiently Random Values
+A04 331 Insufficient Entropy
+A04 332 Insufficient Entropy in PRNG
+A04 334 Small Space of Random Values
+A04 335 Incorrect Usage of Seeds in Pseudo-Random Number Generator(PRNG)
+A04 336 Same Seed in Pseudo-Random Number Generator (PRNG)
+A04 337 Predictable Seed in Pseudo-Random Number Generator (PRNG)
+A04 338 Use of Cryptographically Weak Pseudo-Random Number Generator(PRNG)
+A04 340 Generation of Predictable Numbers or Identifiers
+A04 342 Predictable Exact Value from Previous Values
+A04 347 Improper Verification of Cryptographic Signature
+A04 757 Selection of Less-Secure Algorithm During Negotiation('Algorithm Downgrade')
+A04 759 Use of a One-Way Hash without a Salt
+A04 760 Use of a One-Way Hash with a Predictable Salt
+A04 780 Use of RSA Algorithm without OAEP
+A04 916 Use of Password Hash With Insufficient Computational Effort
+A04 1240 Use of a Cryptographic Primitive with a Risky Implementation
+A04 1241 Use of Predictable Algorithm in Random Number Generator
 A05 20 Improper Input Validation
 A05 74 Improper Neutralization of Special Elements in Output Used by a Downstream Component ('Injection')
 A05 76 Improper Neutralization of Equivalent Special Elements

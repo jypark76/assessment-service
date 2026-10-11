@@ -77,6 +77,7 @@ def app_files():
 # ---------- The real code ----------
 
 @pytest.mark.owasp("A07", 291, 293, 350, 258, 1392, 1393)
+@pytest.mark.owasp("A04", 321)
 def test_authentication_uses_only_the_key_and_no_secret_setting_has_a_default():
     files = app_files()
     assert files, "no application files were found to check"
@@ -246,6 +247,7 @@ def test_an_empty_key_setting_leaves_the_service_closed(monkeypatch, setting):
 
 
 @pytest.mark.owasp("A07", 1392, 1393)
+@pytest.mark.owasp("A04", 321)
 def test_there_is_no_built_in_key_that_works_when_nothing_is_configured(monkeypatch):
     monkeypatch.delenv("SERVICE_KEYS", raising=False)
     for guess in ("", "test", "changeme", "password", "admin", "default", "0" * 32, "a" * 64, "test-only-key-0123456789abcdef0123456789"):
