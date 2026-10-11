@@ -14,6 +14,11 @@ images:
   # The tool that applies database changes. Pinned, never "latest".
   - name: liquibase/liquibase
     newTag: "4.31.1"
+    digest: sha256:dc2e5237941efb92cc6ae0cffd40a5b6f476559d5ed20fd7ca711df4895997a3
+  # The database image: version tag plus the exact digest checked on 2026-10-11.
+  - name: postgres
+    newTag: "17"
+    digest: sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
 # Packs the password-setting script into a ConfigMap. The name suffix is turned
 # off so the database pod can refer to it by its plain name. The namespace is
 # written out because a generated ConfigMap does not get one automatically, and

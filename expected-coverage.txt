@@ -83,6 +83,12 @@ A07 941 Incorrectly Specified Destination in a Communication Channel
 A07 1391 Use of Weak Credentials
 A07 1392 Use of Default Credentials
 A07 1393 Use of Default Password
+A08 426 Untrusted Search Path
+A08 427 Uncontrolled Search Path Element
+A08 494 Download of Code Without Integrity Check
+A08 502 Deserialization of Untrusted Data
+A08 829 Inclusion of Functionality from Untrusted Control Sphere
+A08 915 Improperly Controlled Modification of Dynamically-Determined Object Attributes
 A09 117 Improper Output Neutralization for Logs
 A09 221 Information Loss of Omission
 A09 223 Omission of Security-relevant Information

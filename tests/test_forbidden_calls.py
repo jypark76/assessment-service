@@ -90,6 +90,7 @@ def app_files():
 
 # In plain English: the real check. Every Python file in app/ must be clean.
 @pytest.mark.owasp("A05", 77, 78, 88, 94, 95, 470)
+@pytest.mark.owasp("A08", 426, 427, 502)
 def test_application_code_contains_no_forbidden_calls():
     files = app_files()
     assert files, "no application files were found to check"
@@ -103,6 +104,7 @@ def test_application_code_contains_no_forbidden_calls():
 # empty the test above would have nothing to complain about, so this makes sure the files it covers
 # are the ones we expect to exist.
 @pytest.mark.owasp("A05", 77, 78, 88, 94, 95, 470)
+@pytest.mark.owasp("A08", 426, 427, 502)
 def test_the_check_covers_the_real_application_files():
     names = {path.name for path in app_files()}
     assert {"main.py", "auth.py", "db.py"} <= names
@@ -151,6 +153,7 @@ GOOD_PROGRAMS = {
 
 
 @pytest.mark.owasp("A05", 77, 78, 88, 94, 95, 470)
+@pytest.mark.owasp("A08", 426, 427, 502)
 def test_every_bad_program_is_caught():
     for label, source in BAD_PROGRAMS.items():
         assert find_forbidden(source), f"not caught: {label}"
