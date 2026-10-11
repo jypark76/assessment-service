@@ -12,16 +12,33 @@
 #   - A key shorter than 32 characters is not usable, so a weak key cannot be set by mistake.
 #   - Keys are compared in constant time, so timing reveals nothing about a near miss.
 #   - New routes are protected by default. Only the paths listed in OPEN_PATHS are open.
+#   - Every refusal is logged with its reason, the method and the route, so someone trying keys or
+#     calling with a wrong one can be noticed. The line never holds the key, the header or anything a
+#     caller can use to forge a log line, and a flood of refusals is summarized instead of logged one
+#     by one.
 #
 # What it is not: one shared key says "a trusted caller", not "which person". Real user
 # login comes later.
 import hmac
+import logging
 import os
+import re
+import threading
+import time
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
 MIN_KEY_LENGTH = 32
+
+LOGGER_NAME = "service-key"
+log = logging.getLogger(LOGGER_NAME)
+
+# At most this many refusals are logged one by one in each window. The rest are counted and
+# reported in one line when the next window starts, so an attack cannot fill the log.
+REFUSAL_LOG_LIMIT = 20
+REFUSAL_WINDOW_SECONDS = 60
+PATH_LOG_LENGTH = 100
 
 # Kubernetes' own probes cannot send a key, so the two health checks stay open.
 OPEN_PATHS = {"/health", "/ready"}
@@ -58,6 +75,57 @@ def key_is_valid(presented, keys):
     return matched
 
 
+_lock = threading.Lock()
+_window_start = None
+_logged_in_window = 0
+_held_back = 0
+
+
+# In plain English: the clock the refusal log uses. Tests replace it to move time forward.
+def _now():
+    return time.monotonic()
+
+
+# In plain English: forgets the current window. Used by tests.
+def reset_refusal_window():
+    global _window_start, _logged_in_window, _held_back
+    with _lock:
+        _window_start, _logged_in_window, _held_back = None, 0, 0
+
+
+# In plain English: keeps only plain, harmless characters and cuts the text short, so nothing a caller
+# sends (a line break, a fake log line, a very long path) can change what the log line says.
+def _safe_text(text, longest):
+    return re.sub(r"[^A-Za-z0-9/_.~%\-]", "?", text)[:longest]
+
+
+# In plain English: records one refusal, within the limit for the current window. When a new window
+# starts, first says how many refusals the previous one held back.
+def _note_refusal(reason, request):
+    global _window_start, _logged_in_window, _held_back
+    held = 0
+    with _lock:
+        now = _now()
+        if _window_start is None or now - _window_start >= REFUSAL_WINDOW_SECONDS:
+            held = _held_back
+            _window_start, _logged_in_window, _held_back = now, 0, 0
+        allowed = _logged_in_window < REFUSAL_LOG_LIMIT
+        if allowed:
+            _logged_in_window += 1
+        else:
+            _held_back += 1
+    if held:
+        log.warning("%s more refusals in the previous %s seconds were not logged one by one", held, REFUSAL_WINDOW_SECONDS)
+    if allowed:
+        raw_path = (request.scope.get("raw_path") or request.url.path.encode("utf-8", "replace")).decode("latin-1")
+        log.warning(
+            "service key refused: reason=%s method=%s path=%s",
+            reason,
+            _safe_text(request.method, 10),
+            _safe_text(raw_path, PATH_LOG_LENGTH),
+        )
+
+
 # In plain English: the guard that runs in front of every request (installed in main.py).
 # It lets the open paths through, refuses with 503 when no key is configured, refuses
 # with 401 when the key is missing or wrong, and otherwise lets the request continue.
@@ -66,8 +134,12 @@ async def require_service_key(request: Request, call_next):
         return await call_next(request)
     keys = configured_keys()
     if not keys:
+        _note_refusal("not_configured", request)
         return JSONResponse(status_code=503, content={"problem": "Service key is not configured"})
-    if not key_is_valid(presented_key(request.headers.get("authorization")), keys):
+    header = request.headers.get("authorization")
+    presented = presented_key(header)
+    if not key_is_valid(presented, keys):
+        _note_refusal("missing" if header is None else ("malformed" if presented is None else "wrong"), request)
         return JSONResponse(
             status_code=401,
             content={"problem": "A valid service key is required"},
