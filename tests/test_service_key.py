@@ -96,10 +96,10 @@ def test_the_right_key_gets_past_the_guard():
 @pytest.mark.owasp("A07", 303)
 @pytest.mark.owasp("A04", 320)
 def test_several_keys_can_be_valid_at_once_so_a_key_can_be_rotated(monkeypatch):
-    monkeypatch.setenv("SERVICE_KEYS", f"{OTHER_KEY}, {TEST_KEY}")
+    monkeypatch.setenv("SERVICE_KEYS", f"frontend-service:{OTHER_KEY}, frontend-service:{TEST_KEY}")
     assert call("POST", "/assignments", {"Authorization": f"Bearer {OTHER_KEY}"}).status_code == 422
     assert call("POST", "/assignments", {"Authorization": f"Bearer {TEST_KEY}"}).status_code == 422
-    monkeypatch.setenv("SERVICE_KEYS", OTHER_KEY)
+    monkeypatch.setenv("SERVICE_KEYS", f"frontend-service:{OTHER_KEY}")
     assert call("POST", "/assignments", {"Authorization": f"Bearer {TEST_KEY}"}).status_code == 401
 
 

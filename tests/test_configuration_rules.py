@@ -184,7 +184,7 @@ def test_the_security_relevant_constants_have_the_agreed_values():
     assert auth.REFUSAL_LOG_LIMIT == 20
     assert auth.REFUSAL_WINDOW_SECONDS == 60
     assert auth.PATH_LOG_LENGTH == 100
-    assert auth.LEGACY_CALLER == "legacy" and auth.ALL_ROUTES == "*"
+    assert auth.ALL_ROUTES == "*" and not hasattr(auth, "LEGACY_CALLER")
     assert auth.CALLER_NAME.pattern == "[a-z][a-z0-9-]{1,39}"
     assert errors.FIXED_PROBLEMS[404] == "Not found" and errors.UNEXPECTED_PROBLEM == "Something went wrong"
 

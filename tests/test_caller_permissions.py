@@ -44,7 +44,7 @@ EXPECTED_ROUTES = {
     "GET /docs/oauth2-redirect", "HEAD /docs/oauth2-redirect", "GET /redoc", "HEAD /redoc",
 }
 # What each caller may use in the REAL service ("*" means every route).
-REAL_ALLOWED = {"frontend-service": "*", "legacy": "*"}
+REAL_ALLOWED = {"frontend-service": "*"}
 # What each caller may use in these tests, including the test-only one.
 EXPECTED_ALLOWED = {**REAL_ALLOWED, "report-viewer": {"GET /assignments"}}
 
@@ -98,11 +98,11 @@ def test_named_keys_are_read_with_their_caller_names():
 
 
 @pytest.mark.owasp("A01", 284, 285, 863)
-def test_a_plain_key_still_works_as_the_legacy_caller_so_nothing_breaks_during_the_switch():
+def test_an_entry_without_a_caller_name_is_a_problem_and_never_a_caller():
     callers, problems = auth.parse_callers(OLD_KEY)
-    assert problems == [] and [(name, key.decode()) for name, key in callers] == [("legacy", OLD_KEY)]
+    assert callers == [] and problems == ["an entry has no caller name"]
     callers, problems = auth.parse_callers(f"{OLD_KEY},{CONFIG}")
-    assert problems == [] and {name for name, _ in callers} == {"legacy", "frontend-service", "report-viewer"}
+    assert problems == ["an entry has no caller name"]
 
 
 @pytest.mark.owasp("A01", 284, 285, 863)
@@ -125,7 +125,7 @@ def test_one_caller_may_hold_two_keys_so_a_key_can_be_replaced_without_downtime(
         f"surprise-service:{FRONT_KEY}",  # a name this service has no permissions for
         f"grader-service:{VIEWER_KEY}",  # the grader uses Kafka here, so it has no web permissions at all
         f"frontend-service:{FRONT_KEY},report-viewer:{FRONT_KEY}",  # one key shared by two callers
-        f"frontend-service:{FRONT_KEY},{FRONT_KEY}",  # the same key as a named caller and as legacy
+        f"frontend-service:{FRONT_KEY},{FRONT_KEY}",  # the same key as a named caller and as a plain entry
     ],
 )
 def test_a_bad_setting_is_reported_and_the_service_stays_closed(raw, fresh):
@@ -188,10 +188,11 @@ def test_every_caller_gets_exactly_the_routes_it_is_allowed_on_every_route(calle
 
 
 @pytest.mark.owasp("A01", 284, 285, 863)
-def test_the_legacy_plain_key_keeps_full_access_until_it_is_removed(fresh):
+def test_a_plain_key_gets_no_access_and_closes_the_whole_service(fresh):
     fresh.setenv("SERVICE_KEYS", f"{OLD_KEY},{CONFIG}")
     for route_key in sorted(EXPECTED_ROUTES):
-        assert call(route_key, OLD_KEY).status_code not in (401, 403), route_key
+        for key in (OLD_KEY, FRONT_KEY, VIEWER_KEY):
+            assert call(route_key, key).status_code == 503, (route_key, key)
 
 
 @pytest.mark.owasp("A01", 284, 285, 863)
@@ -262,6 +263,6 @@ def test_every_configured_key_is_compared_so_timing_does_not_reveal_which_one_ma
     seen = []
     real = auth.hmac.compare_digest
     monkeypatch.setattr(auth.hmac, "compare_digest", lambda a, b: seen.append(1) or real(a, b))
-    callers, _ = auth.parse_callers(f"{OLD_KEY},{CONFIG}")
+    callers, _ = auth.parse_callers(f"frontend-service:{SECOND_FRONT_KEY},{CONFIG}")
     auth.authenticate(FRONT_KEY.encode(), callers)  # matches the second of three
     assert len(seen) == len(callers) == 3
