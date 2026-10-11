@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 from app.main import app
 from conftest import TEST_KEY
 
+import pytest
+
 OPEN_PATHS = {"/health", "/ready"}
 OTHER_KEY = "another-valid-key-0123456789abcdef012345"
 bare = TestClient(app)
@@ -92,6 +94,7 @@ def test_several_keys_can_be_valid_at_once_so_a_key_can_be_rotated(monkeypatch):
     assert call("POST", "/assignments", {"Authorization": f"Bearer {TEST_KEY}"}).status_code == 401
 
 
+@pytest.mark.owasp("A10", 636)
 def test_with_no_key_configured_the_service_refuses_instead_of_opening(monkeypatch):
     for value in (None, "", "   ", ",", "short"):
         if value is None:

@@ -32,3 +32,22 @@ A09 221 Information Loss of Omission
 A09 223 Omission of Security-relevant Information
 A09 532 Insertion of Sensitive Information into Log File
 A09 778 Insufficient Logging
+A10 209 Generation of Error Message Containing Sensitive Information
+A10 215 Insertion of Sensitive Information Into Debugging Code
+A10 234 Failure to Handle Missing Parameter
+A10 235 Improper Handling of Extra Parameters
+A10 248 Uncaught Exception
+A10 252 Unchecked Return Value
+A10 274 Improper Handling of Insufficient Privileges
+A10 280 Improper Handling of Insufficient Permissions or Privileges
+A10 390 Detection of Error Condition Without Action
+A10 391 Unchecked Error Condition
+A10 394 Unexpected Status Code or Return Value
+A10 396 Declaration of Catch for Generic Exception
+A10 460 Improper Cleanup on Thrown Exception
+A10 550 Server-generated Error Message Containing Sensitive Information
+A10 636 Not Failing Securely ('Failing Open')
+A10 703 Improper Check or Handling of Exceptional Conditions
+A10 754 Improper Check for Unusual or Exceptional Conditions
+A10 755 Improper Handling of Exceptional Conditions
+A10 756 Missing Custom Error Page

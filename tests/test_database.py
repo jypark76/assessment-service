@@ -35,6 +35,7 @@ def test_ready_with_a_working_login():
 # it must answer 503 and say nothing about why. The test first proves the right
 # password works, so a 503 can only be caused by the wrong password and not by a
 # database that was never reachable at all.
+@pytest.mark.owasp("A10", 636)
 def test_ready_fails_quietly_with_a_wrong_password(monkeypatch):
     assert client.get("/ready").status_code == 200
     monkeypatch.setenv("DB_PASSWORD", "not-the-password")

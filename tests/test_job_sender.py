@@ -199,6 +199,7 @@ def test_confirmed_jobs_go_to_the_grading_jobs_topic_and_are_recorded_by_submiss
     assert store.recorded == [(first[0], 1), (second[0], 3)]
 
 
+@pytest.mark.owasp("A10", 252, 394)
 def test_a_job_the_broker_refused_is_not_recorded_and_is_sent_again():
     good, refused = row(), row()
     store = FakeStore([good, refused])

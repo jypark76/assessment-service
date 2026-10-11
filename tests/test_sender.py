@@ -158,6 +158,7 @@ def test_confirmed_messages_go_to_the_agreed_topic_and_are_recorded():
     assert store.recorded == [r[0] for r in store.rows]
 
 
+@pytest.mark.owasp("A10", 252, 394)
 def test_a_message_the_broker_refused_is_not_recorded_and_is_sent_again_next_round():
     good, refused = row(), row()
     store = FakeStore([good, refused])
