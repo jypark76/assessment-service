@@ -85,6 +85,7 @@ def readable_text_files():
 @pytest.mark.owasp("A01", 540, 615, 538)
 @pytest.mark.owasp("A07", 259, 798)
 @pytest.mark.owasp("A02", 260)
+@pytest.mark.owasp("A04", 321)
 def test_no_file_in_the_repo_holds_a_secret():
     problems = []
     for relative, text in readable_text_files():

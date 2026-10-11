@@ -93,6 +93,7 @@ def test_the_right_key_gets_past_the_guard():
 
 
 @pytest.mark.owasp("A07", 303)
+@pytest.mark.owasp("A04", 320)
 def test_several_keys_can_be_valid_at_once_so_a_key_can_be_rotated(monkeypatch):
     monkeypatch.setenv("SERVICE_KEYS", f"{OTHER_KEY}, {TEST_KEY}")
     assert call("POST", "/assignments", {"Authorization": f"Bearer {OTHER_KEY}"}).status_code == 422
@@ -118,6 +119,7 @@ def test_with_no_key_configured_the_service_refuses_instead_of_opening(monkeypat
 
 
 @pytest.mark.owasp("A07", 1391)
+@pytest.mark.owasp("A04", 320)
 def test_a_short_key_is_not_accepted_even_if_it_matches(monkeypatch):
     monkeypatch.setenv("SERVICE_KEYS", "short")
     assert call("GET", "/assignments", {"Authorization": "Bearer short"}).status_code == 503

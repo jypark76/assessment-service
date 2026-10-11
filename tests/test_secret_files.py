@@ -129,6 +129,7 @@ def test_a_path_with_a_null_character_or_no_text_is_not_allowed(path):
 
 
 @pytest.mark.owasp("A02", 526)
+@pytest.mark.owasp("A04", 320)
 def test_the_service_key_is_read_from_the_mounted_file(monkeypatch, files):
     monkeypatch.delenv("SERVICE_KEYS", raising=False)
     monkeypatch.setenv("SERVICE_KEYS_FILE", PATH)
@@ -139,6 +140,7 @@ def test_the_service_key_is_read_from_the_mounted_file(monkeypatch, files):
 
 
 @pytest.mark.owasp("A02", 526)
+@pytest.mark.owasp("A04", 320)
 def test_a_changed_secret_takes_effect_without_a_restart(monkeypatch, files):
     monkeypatch.delenv("SERVICE_KEYS", raising=False)
     monkeypatch.setenv("SERVICE_KEYS_FILE", PATH)
