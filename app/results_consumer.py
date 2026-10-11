@@ -77,11 +77,16 @@ def handle_message(key, value, record=record_grade):
     except ValidationError:
         return "dead_letter", "invalid_field"
 
+    # The key must be the submission ID written the normal way (lowercase, with hyphens, or the same in
+    # capitals). Python's own UUID reader also accepts odd forms (a trailing newline, spaces, a plus
+    # sign, a 0x prefix, braces, no hyphens), which have no business in a key and could carry a line
+    # break into a log line.
     try:
-        key_id = uuid.UUID(key.decode("utf-8"))
+        key_text = key.decode("utf-8")
+        key_id = uuid.UUID(key_text)
     except (AttributeError, UnicodeDecodeError, ValueError):
         return "dead_letter", "key_mismatch"
-    if key_id != message.submission_id:
+    if key_text.lower() != str(key_id) or key_id != message.submission_id:
         return "dead_letter", "key_mismatch"
 
     grade = NewGrade(
@@ -144,11 +149,13 @@ def run(consumer, producer, record=record_grade, should_stop=lambda: False):
         consumer.close()
 
 
-# In plain English: the key as text for a log line, or a placeholder if it is not readable.
+# In plain English: the key as text for a log line. It is rewritten from the UUID it stands for, so
+# nothing the producer typed (a line break, extra spaces) can reach the log. A key that is not a UUID
+# at all is shown as "unreadable".
 def _key_text(key):
     try:
-        return key.decode("utf-8")
-    except (AttributeError, UnicodeDecodeError):
+        return str(uuid.UUID(key.decode("utf-8")))
+    except (AttributeError, UnicodeDecodeError, ValueError):
         return "unreadable"
 
 
