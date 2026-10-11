@@ -12,6 +12,8 @@ A01 61 UNIX Symbolic Link (Symlink) Following
 A01 65 Windows Hard Link
 A01 219 Storage of File with Sensitive Data Under Web Root
 A01 276 Incorrect Default Permissions
+A01 284 Improper Access Control
+A01 285 Improper Authorization
 A01 377 Insecure Temporary File
 A01 379 Creation of Temporary File in Directory with Insecure Permissions
 A01 424 Improper Protection of Alternate Path
@@ -28,6 +30,7 @@ A01 668 Exposure of Resource to Wrong Sphere
 A01 732 Incorrect Permission Assignment for Critical Resource
 A01 749 Exposed Dangerous Method or Function
 A01 862 Missing Authorization
+A01 863 Incorrect Authorization
 A01 918 Server-Side Request Forgery (SSRF)
 A03 447 Use of Obsolete Function
 A03 1035 2017 Top 10 A9: Using Components with Known Vulnerabilities
