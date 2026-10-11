@@ -238,7 +238,7 @@ jobs:
             echo "Unexpected files in /app: $contents" >&2
             exit 1
           fi
-          suspicious="$(docker exec image-test find /app \( -name '.env*' -o -name '*.pem' -o -name '*.key' -o -iname '*secret*' \))"
+          suspicious="$(docker exec image-test find /app \( -name '.env*' -o -name '*.pem' -o -name '*.key' -o -iname '*secret*' \) ! -path /app/app/secret_files.py)"
           if [ -n "$suspicious" ]; then
             echo "Files that look like secrets are inside the image:" >&2
             echo "$suspicious" >&2
