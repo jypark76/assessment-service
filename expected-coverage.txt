@@ -6,6 +6,8 @@
 # Add a line here in the same change that adds the tagged test.
 A03 447 Use of Obsolete Function
 A03 1035 2017 Top 10 A9: Using Components with Known Vulnerabilities
+A03 1104 Use of Unmaintained Third Party Components
+A03 1329 Reliance on Component That is Not Updateable
 A03 1357 Reliance on Insufficiently Trustworthy Component
 A03 1395 Dependency on Vulnerable Third-Party Component
 A05 20 Improper Input Validation

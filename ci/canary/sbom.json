@@ -1,0 +1,20 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "scanner-canary",
+      "version": "0"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "urllib3",
+      "version": "1.26.4",
+      "purl": "pkg:pypi/urllib3@1.26.4"
+    }
+  ]
+}
