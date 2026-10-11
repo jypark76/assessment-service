@@ -61,6 +61,7 @@ def app_files():
 # In plain English: the real check. Every Python file in app/ must be clean.
 @pytest.mark.owasp("A05", 610)
 @pytest.mark.owasp("A01", 918, 441)
+@pytest.mark.owasp("A07", 941)
 def test_application_code_reaches_only_fixed_destinations():
     files = app_files()
     assert files, "no application files were found to check"
@@ -73,6 +74,7 @@ def test_application_code_reaches_only_fixed_destinations():
 # In plain English: the Kafka topic names themselves are fixed words in the code and match the written
 # contracts, so a topic can only ever be one we agreed.
 @pytest.mark.owasp("A05", 610)
+@pytest.mark.owasp("A07", 941)
 def test_the_topic_names_are_fixed_words():
     expected = {
         "results_consumer.py": ['TOPIC = "grading-results"', 'DEAD_LETTER_TOPIC = "grading-results.dead-letter"'],
