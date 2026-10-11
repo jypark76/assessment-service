@@ -289,6 +289,7 @@ def test_a_twenty_thousand_character_essay_works_and_blank_text_does_not():
 
 # In plain English: reading works (the control), and changing or deleting rows is refused
 # on both tables, as is emptying them.
+@pytest.mark.owasp("A01", 276, 732)
 def test_the_login_cannot_change_or_delete_rows():
     assignment_id = add_assignment()
     submission_id = start_submission(assignment_id)

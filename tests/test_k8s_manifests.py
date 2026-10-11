@@ -407,6 +407,7 @@ def test_catches_a_missing_tag():
     assert any("no version tag" in problem for problem in find_problems(docs))
 
 
+@pytest.mark.owasp("A01", 668)
 def test_catches_a_service_open_to_the_outside():
     docs = good_docs()
     docs[2]["spec"]["type"] = "NodePort"
@@ -432,6 +433,7 @@ def test_catches_a_name_mismatch_in_a_mounted_folder():
     assert any("scripts-1a2b3c" in problem for problem in find_problems(docs))
 
 
+@pytest.mark.owasp("A01", 276, 732)
 def test_catches_a_pod_that_may_run_as_root():
     docs = good_docs()
     deployment_of(docs)["spec"]["template"]["spec"]["securityContext"] = {}
@@ -440,6 +442,7 @@ def test_catches_a_pod_that_may_run_as_root():
     assert any("runAsUser" in problem for problem in problems)
 
 
+@pytest.mark.owasp("A01", 276, 732)
 def test_catches_privilege_escalation_and_kept_capabilities():
     docs = good_docs()
     security = containers_of(deployment_of(docs))[0]["securityContext"]

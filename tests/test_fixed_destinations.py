@@ -60,6 +60,7 @@ def app_files():
 
 # In plain English: the real check. Every Python file in app/ must be clean.
 @pytest.mark.owasp("A05", 610)
+@pytest.mark.owasp("A01", 918, 441)
 def test_application_code_reaches_only_fixed_destinations():
     files = app_files()
     assert files, "no application files were found to check"

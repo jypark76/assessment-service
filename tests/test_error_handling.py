@@ -39,6 +39,7 @@ def error_logs(caplog):
 # ---------- Unexpected errors ----------
 
 @pytest.mark.owasp("A10", 209, 550, 248, 703, 755)
+@pytest.mark.owasp("A01", 497)
 def test_an_unexpected_error_gets_a_fixed_reply_with_nothing_from_inside(monkeypatch):
     make_fail(monkeypatch, RuntimeError(f"boom {SENTINEL} Traceback (most recent call last) File secret.py"))
     reply = client.get(ROUTE)
@@ -145,6 +146,7 @@ def test_an_unknown_address_gets_a_fixed_not_found_reply_that_does_not_repeat_it
 
 
 @pytest.mark.owasp("A10", 756)
+@pytest.mark.owasp("A01", 497)
 def test_a_wrong_method_gets_a_fixed_reply_and_keeps_the_allow_header():
     reply = client.post("/health")
     assert reply.status_code == 405
