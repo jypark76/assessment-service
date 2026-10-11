@@ -1,0 +1,18 @@
+# In plain English: the test-only libraries, written by hand. requirements-dev.txt is generated from this
+# file. They are kept out of requirements.txt on purpose, so the Docker image that runs the service never
+# carries test tools. "-c requirements.txt" makes sure the tests use exactly the same versions of the
+# shared libraries as the service does.
+# To regenerate the locked file after editing this one, run this from this folder (it needs Docker):
+#   docker run --rm -v "$PWD:/work" -w /work python:3.12-slim sh -c "pip install -q uv==0.12.24 && uv pip compile requirements-dev.in --output-file requirements-dev.txt --generate-hashes --universal --python-version 3.12"
+# The python:3.12-slim image is the same system the service image is built on.
+-r requirements.in
+-c requirements.txt
+
+# The test runner.
+pytest==9.1.1
+
+# Lets the tests call the service's web addresses without starting a server.
+httpx==0.28.1
+
+# Reads the rendered Kubernetes files in the Kubernetes file checks.
+pyyaml==6.0.3

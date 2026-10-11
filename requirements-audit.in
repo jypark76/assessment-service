@@ -1,0 +1,12 @@
+# In plain English: the vulnerability scanner (pip-audit) used by the dependency-audit workflow, written by hand.
+# requirements-audit.txt is generated from this file with every library pinned to an exact version and a
+# hash, so the tool that checks our libraries is itself installed from a checked, locked list.
+# To regenerate the locked file after editing this one, run this from this folder (it needs Docker):
+#   docker run --rm -v "$PWD:/work" -w /work python:3.12-slim sh -c "pip install -q uv==0.12.24 && uv pip compile requirements-audit.in --output-file requirements-audit.txt --generate-hashes --universal --python-version 3.12"
+# The python:3.12-slim image is the same system the service image is built on.
+
+# The scanner. It compares the locked versions with the public list of known security problems.
+pip-audit==2.10.1
+
+# The tool that installs the libraries, pinned too.
+pip==26.2.1

@@ -1,0 +1,26 @@
+# In plain English: the list of outside Python libraries this service needs, written by hand.
+# This file is the INPUT. requirements.txt is generated from it with every library (including the
+# ones these libraries need) pinned to an exact version and a hash. To change a library, edit this
+# file and regenerate requirements.txt (the command is below); never edit the
+# generated file by hand.
+# To regenerate the locked file after editing this one, run this from this folder (it needs Docker):
+#   docker run --rm -v "$PWD:/work" -w /work python:3.12-slim sh -c "pip install -q uv==0.12.24 && uv pip compile requirements.in --output-file requirements.txt --generate-hashes --universal --python-version 3.12"
+# The python:3.12-slim image is the same system the service image is built on.
+
+# The web framework that receives requests and checks incoming data.
+fastapi==0.142.4
+
+# The small web server that actually runs the FastAPI app.
+uvicorn==0.54.0
+
+# The driver that lets Python talk to the Postgres database. The "binary" part
+# means it comes ready-made, so the box needs no extra build tools.
+psycopg[binary]==3.3.6
+
+# The Kafka client the sender (app/sender.py) uses to publish approved examples. Pinned
+# like the rest.
+confluent-kafka==2.16.0
+
+# The tool that installs the libraries. It is pinned too, so the image never builds with whatever
+# version of pip the base image happened to ship.
+pip==26.2.1
