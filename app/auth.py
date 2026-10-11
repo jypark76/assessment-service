@@ -37,6 +37,8 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.routing import Match
 
+from app.secret_files import read_secret
+
 MIN_KEY_LENGTH = 32
 
 LOGGER_NAME = "service-key"
@@ -97,7 +99,11 @@ def parse_callers(raw):
 # In plain English: reads the setting fresh on every call (so tests and key rotation take effect at once). If
 # the setting has any problem, no caller is usable at all: it is better to stay closed than to guess.
 def configured_callers():
-    callers, problems = parse_callers(os.environ.get("SERVICE_KEYS", ""))
+    try:
+        raw = read_secret("SERVICE_KEYS") or ""
+    except RuntimeError:
+        return [], ["the key file could not be read"]  # an unreadable file leaves the service closed
+    callers, problems = parse_callers(raw)
     return ([], problems) if problems else (callers, problems)
 
 

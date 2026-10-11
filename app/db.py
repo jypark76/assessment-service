@@ -6,11 +6,22 @@ import os
 
 import psycopg
 
+from app.secret_files import read_secret
+
 
 # In plain English: reads one required setting and stops with a clear message
 # if it is missing. Failing early is better than a confusing error later.
 def _required(name):
     value = os.environ.get(name)
+    if not value:
+        raise RuntimeError(f"Missing required setting: {name}")
+    return value
+
+
+# In plain English: reads one required secret (from a mounted file if DB_PASSWORD_FILE names one, otherwise from the
+# plain setting) and stops with a clear message if it is missing or empty. The value is never put in the message.
+def _required_secret(name):
+    value = read_secret(name)
     if not value:
         raise RuntimeError(f"Missing required setting: {name}")
     return value
@@ -24,7 +35,7 @@ def connect():
         port=int(os.environ.get("DB_PORT", "5432")),
         dbname=_required("DB_NAME"),
         user=_required("DB_USER"),
-        password=_required("DB_PASSWORD"),
+        password=_required_secret("DB_PASSWORD"),
         connect_timeout=3,
     )
 

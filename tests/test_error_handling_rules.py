@@ -126,6 +126,7 @@ def app_files():
 # ---------- The real code ----------
 
 @pytest.mark.owasp("A10", 396, 390, 391, 460)
+@pytest.mark.owasp("A02", 489)
 def test_application_code_has_no_sloppy_error_handling():
     files = app_files()
     assert files, "no application files were found to check"
@@ -242,6 +243,7 @@ def test_db_py_may_open_a_connection_only_inside_its_own_connect_function():
 # ---------- Debug leftovers in the deploy files ----------
 
 @pytest.mark.owasp("A10", 215)
+@pytest.mark.owasp("A02", 489)
 def test_the_dockerfile_and_kubernetes_files_switch_no_debug_or_reload_on():
     files = [ROOT / "Dockerfile", *sorted((ROOT / "k8s").rglob("*.y*ml")), *sorted((ROOT / "k8s").rglob("*.sh"))]
     files = [f for f in files if f.exists()]
@@ -256,6 +258,7 @@ def test_the_dockerfile_and_kubernetes_files_switch_no_debug_or_reload_on():
 
 
 @pytest.mark.owasp("A10", 215)
+@pytest.mark.owasp("A02", 489)
 def test_the_running_app_is_not_in_debug_mode():
     from app.main import app
 

@@ -66,6 +66,32 @@ def containers_of(deployment):
     return deployment["spec"]["template"]["spec"].get("containers", [])
 
 
+# In plain English: checks that a secret reaches a container as a mounted FILE and not as an environment variable.
+# "setting" is the name the code uses (for example DB_PASSWORD). The container must have no setting by that name,
+# must have SETTING_FILE pointing into /etc/secrets, and that path must be a read-only mount of exactly the named
+# Secret and key.
+def assert_secret_file(docs, container, setting, secret_name, key):
+    env = {item["name"]: item for item in container.get("env", [])}
+    assert setting not in env, f"{setting} must not be an environment variable"
+    file_setting = env[f"{setting}_FILE"]
+    assert "valueFrom" not in file_setting
+    path = file_setting["value"]
+    folder, _, file_name = path.rpartition("/")
+    assert path.startswith("/etc/secrets/") and file_name == key, path
+    owner = next(d for d in docs if d["kind"] in ("Deployment", "Job", "StatefulSet") and any(c is container for c in containers_of(d)))
+    volumes = {volume["name"]: volume for volume in owner["spec"]["template"]["spec"].get("volumes", [])}
+    mount = next(m for m in container["volumeMounts"] if m["mountPath"] == folder)
+    assert mount.get("readOnly") is True
+    secret = volumes[mount["name"]]["secret"]
+    assert secret["secretName"] == secret_name
+    assert secret["items"] == [{"key": key, "path": key}]
+
+
+# In plain English: a setting such as DB_PASSWORD_FILE holds the PATH of a mounted Secret file, not a password.
+def is_secret_file_setting(env):
+    return env["name"].endswith("_FILE") and str(env.get("value", "")).startswith("/etc/secrets/")
+
+
 # In plain English: lists every ConfigMap and Secret that a Deployment points at,
 # as (kind, name) pairs. It looks in all the places a pod can point at one:
 # settings, settings from a whole ConfigMap, and mounted folders.
@@ -142,7 +168,7 @@ def find_problems(docs):
             # Rule 8: a password is never written as a plain value in the files. It
             # has to come from a Secret, because this repo is public.
             for env in container.get("env", []):
-                if "PASSWORD" in env["name"].upper() and "valueFrom" not in env:
+                if "PASSWORD" in env["name"].upper() and "valueFrom" not in env and not is_secret_file_setting(env):
                     problems.append(f"{label}: {env['name']} must come from a Secret, not a written value")
 
         # Rule 7: every ConfigMap or Secret a pod points at must exist in the
@@ -483,6 +509,18 @@ def test_catches_a_migration_job_that_may_run_as_root():
 
 # In plain English: a password must never be written as a plain value in the files.
 # It has to come from the Kubernetes Secret, because this repo is public.
+
+def test_a_secret_file_path_is_not_mistaken_for_a_written_password():
+    assert is_secret_file_setting({"name": "DB_PASSWORD_FILE", "value": "/etc/secrets/db/app-password"})
+
+
+def test_a_written_password_is_still_caught_even_if_it_is_named_like_a_file_setting():
+    assert not is_secret_file_setting({"name": "DB_PASSWORD_FILE", "value": "hunter2"})
+    assert not is_secret_file_setting({"name": "DB_PASSWORD_FILE", "value": "/tmp/x"})
+    assert not is_secret_file_setting({"name": "DB_PASSWORD", "value": "/etc/secrets/db/app-password"})
+    assert not is_secret_file_setting({"name": "DB_PASSWORD"})
+
+
 def test_catches_a_password_written_in_the_files():
     docs = good_docs()
     containers_of(job_of(docs))[0]["env"] = [{"name": "LIQUIBASE_COMMAND_PASSWORD", "value": "hunter2"}]
@@ -504,10 +542,7 @@ def test_failed_migration_pods_are_kept_so_their_log_can_be_read(real_docs):
 # create command if that Secret does not exist yet.
 def test_the_service_key_comes_from_a_secret_never_from_the_files(real_docs):
     deployment = next(d for d in real_docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "assessment-service")
-    env = {item["name"]: item for item in containers_of(deployment)[0]["env"]}
-    key = env["SERVICE_KEYS"]
-    assert "value" not in key
-    assert key["valueFrom"]["secretKeyRef"] == {"name": "assessment-service-key", "key": "keys"}
+    assert_secret_file(real_docs, containers_of(deployment)[0], "SERVICE_KEYS", "assessment-service-key", "keys")
     settings = next(d for d in real_docs if d["kind"] == "ConfigMap" and d["metadata"]["name"] == "assessment-service-config")
     assert "SERVICE_KEYS" not in settings["data"]
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
@@ -528,14 +563,14 @@ def test_the_sender_runs_the_sender_code_from_the_same_image(real_docs):
     assert "ports" not in container
     assert sender["spec"]["replicas"] == 1
     assert sender["spec"]["template"]["metadata"]["labels"]["app"] == "assessment-sender"
-    password = {item["name"]: item for item in container["env"]}["DB_PASSWORD"]
-    assert "value" not in password
-    assert password["valueFrom"]["secretKeyRef"] == {"name": "assessment-db", "key": "app-password"}
+    assert_secret_file(real_docs, container, "DB_PASSWORD", "assessment-db", "app-password")
     settings = next(d for d in real_docs if d["kind"] == "ConfigMap" and d["metadata"]["name"] == "assessment-service-config")
     assert settings["data"]["KAFKA_BOOTSTRAP"] == "kafka.kafka.svc.cluster.local:9092"
     assert container["envFrom"] == [{"configMapRef": {"name": "assessment-service-config"}}]
     # The sender does not call the service's own routes, so it must not hold the service key.
     assert "SERVICE_KEYS" not in {item["name"] for item in container["env"]}
+
+    assert "SERVICE_KEYS_FILE" not in {item["name"] for item in container["env"]}
 
 
 # In plain English: the job sender is its own Deployment from the SAME image, started with a
@@ -551,11 +586,11 @@ def test_the_job_sender_runs_the_job_sender_code_from_the_same_image(real_docs):
     assert "ports" not in container
     assert sender["spec"]["replicas"] == 1
     assert sender["spec"]["template"]["metadata"]["labels"]["app"] == "assessment-job-sender"
-    password = {item["name"]: item for item in container["env"]}["DB_PASSWORD"]
-    assert "value" not in password
-    assert password["valueFrom"]["secretKeyRef"] == {"name": "assessment-db", "key": "app-password"}
+    assert_secret_file(real_docs, container, "DB_PASSWORD", "assessment-db", "app-password")
     assert container["envFrom"] == [{"configMapRef": {"name": "assessment-service-config"}}]
     assert "SERVICE_KEYS" not in {item["name"] for item in container["env"]}
+
+    assert "SERVICE_KEYS_FILE" not in {item["name"] for item in container["env"]}
 
 
 # In plain English: the results consumer is its own Deployment from the SAME image, started with a
@@ -571,8 +606,8 @@ def test_the_results_consumer_runs_the_consumer_code_from_the_same_image(real_do
     assert "ports" not in container
     assert consumer["spec"]["replicas"] == 1
     assert consumer["spec"]["template"]["metadata"]["labels"]["app"] == "assessment-results-consumer"
-    password = {item["name"]: item for item in container["env"]}["DB_PASSWORD"]
-    assert "value" not in password
-    assert password["valueFrom"]["secretKeyRef"] == {"name": "assessment-db", "key": "app-password"}
+    assert_secret_file(real_docs, container, "DB_PASSWORD", "assessment-db", "app-password")
     assert container["envFrom"] == [{"configMapRef": {"name": "assessment-service-config"}}]
     assert "SERVICE_KEYS" not in {item["name"] for item in container["env"]}
+
+    assert "SERVICE_KEYS_FILE" not in {item["name"] for item in container["env"]}
