@@ -4,6 +4,7 @@
 # not listed here. So deleting or skipping a guardrail test cannot go unnoticed, and a new claim has to
 # be written down on purpose. Each line is: category, CWE number, then the name for people to read.
 # Add a line here in the same change that adds the tagged test.
+A03 447 Use of Obsolete Function
 A03 1035 2017 Top 10 A9: Using Components with Known Vulnerabilities
 A03 1357 Reliance on Insufficiently Trustworthy Component
 A03 1395 Dependency on Vulnerable Third-Party Component
