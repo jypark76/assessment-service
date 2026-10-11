@@ -1,0 +1,8 @@
+# In plain English: exceptions to the image scan. Each exception must name ONE flaw and be written like this:
+#
+#   # 2026-10-12 reason: the flaw is in a Debian package we never run; fixed in the next base image. Review by 2026-11-12.
+#   - vulnerability: CVE-2026-12345
+#
+# A flaw that has no fix yet needs no exception, because the scan already ignores flaws nobody has fixed.
+# The tests refuse an exception without a date and a reason.
+ignore: []

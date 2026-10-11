@@ -1,0 +1,37 @@
+# In plain English: tells GitHub's Dependabot to look every week for newer versions of what we depend on and
+# to open a pull request for each. The pull requests go through the same tests as any change, so an update
+# that breaks something turns red instead of merging by itself. "cooldown" waits a few days after a release
+# before proposing it, which gives the community time to notice a tampered release.
+version: 2
+updates:
+  # The Python libraries (requirements*.txt, with their hashes).
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 3
+
+  # The base image in the service's Dockerfile.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 3
+
+  # The pinned vulnerability scanner.
+  - package-ecosystem: "docker"
+    directory: "/ci/scanner"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 3
+
+  # The GitHub Actions our workflows use (pinned to a commit, with the version in a comment).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 3

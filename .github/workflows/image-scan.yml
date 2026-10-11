@@ -1,0 +1,49 @@
+# In plain English: builds this service's Docker image and scans the inside of it (our libraries AND the
+# system packages of the base image) for known security flaws, using a pinned copy of Grype. The check turns
+# red on any high or critical flaw that already has a fix. It runs on every pull request, every change to
+# main and every Monday, because new flaws are announced without any change in our code.
+#
+# Before the real scan it scans a tiny list that names a known-vulnerable library and requires the scanner to
+# fail on it. A scanner whose flaw database is out of date keeps exiting with success while missing new
+# flaws, so this "canary" proves the scanner can still see.
+name: image-scan
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 6 * * 1"
+  workflow_dispatch:
+
+# The workflow only needs to read the code, nothing more.
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Build this service's image
+        run: docker build -t service-under-scan:ci .
+
+      - name: Build the pinned scanner
+        run: docker build -t image-scanner:ci ci/scanner
+
+      # Grype exits with 2 when it finds a flaw at or above the chosen level. Any other exit code (for
+      # example 1 when the flaw database cannot be downloaded) means the scanner is broken, not working.
+      - name: Prove the scanner still catches a known flaw
+        run: |
+          status=0
+          docker run --rm -v "$PWD/ci/canary:/canary:ro" image-scanner:ci sbom:/canary/sbom.json --fail-on high || status=$?
+          if [ "$status" -ne 2 ]; then
+            echo "The scanner did not flag a known-vulnerable library (exit code $status), so its results cannot be trusted." >&2
+            exit 1
+          fi
+
+      # --fail-on high stops the build on high and critical flaws. --only-fixed ignores flaws that nobody has
+      # fixed yet, so the check only fails on something we can actually act on.
+      - name: Scan the image for fixable high and critical flaws
+        run: docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD/.grype.yaml:/config/.grype.yaml:ro" image-scanner:ci -c /config/.grype.yaml docker:service-under-scan:ci --fail-on high --only-fixed
