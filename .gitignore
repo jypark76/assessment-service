@@ -28,3 +28,6 @@ dist/
 # The private folder where Python keeps its libraries while testing locally
 .venv/
 .pytest_cache/
+
+# Type checker cache
+.mypy_cache/

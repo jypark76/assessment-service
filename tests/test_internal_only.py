@@ -80,6 +80,7 @@ def real_documents():
 # ---------- The real files ----------
 
 @pytest.mark.owasp("A01", 668)
+@pytest.mark.owasp("A06", 1125, 419)
 def test_nothing_this_repo_deploys_can_be_reached_from_outside_the_cluster():
     documents, services = real_documents()
     assert services >= 1, "no Service file was found, so there was nothing to check"

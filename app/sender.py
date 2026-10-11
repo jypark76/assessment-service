@@ -151,7 +151,7 @@ def send_batch(producer, fetch, record, limit=50, skipped=None, topic=TOPIC, bui
 # so it never hammers the database or a struggling Kafka. The pieces are parameters so tests
 # can pass pretend ones.
 def run(producer, fetch, record, should_stop=lambda: False, pause=5, sleep=time.sleep, limit=50, **how):
-    skipped = set()
+    skipped: set = set()
     while not should_stop():
         if send_batch(producer, fetch, record, limit=limit, skipped=skipped, **how) == 0:
             sleep(pause)

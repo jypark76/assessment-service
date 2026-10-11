@@ -92,6 +92,30 @@ A05 116 Improper Encoding or Escaping of Output
 A05 159 Improper Handling of Invalid Use of Special Elements
 A05 470 Use of Externally-Controlled Input to Select Classes or Code ('Unsafe Reflection')
 A05 610 Externally Controlled Reference to a Resource in Another Sphere
+A06 73 External Control of File Name or Path
+A06 183 Permissive List of Allowed Inputs
+A06 266 Incorrect Privilege Assignment
+A06 269 Improper Privilege Management
+A06 286 Incorrect User Management
+A06 316 Cleartext Storage of Sensitive Information in Memory
+A06 362 Concurrent Execution using Shared Resource with Improper Synchronization ('Race Condition')
+A06 419 Unprotected Primary Channel
+A06 434 Unrestricted Upload of File with Dangerous Type
+A06 454 External Initialization of Trusted Variables or Data Stores
+A06 472 External Control of Assumed-Immutable Web Parameter
+A06 501 Trust Boundary Violation
+A06 598 Use of GET Request Method With Sensitive Query Strings
+A06 602 Client-Side Enforcement of Server-Side Security
+A06 628 Function Call with Incorrectly Specified Arguments
+A06 642 External Control of Critical State Data
+A06 646 Reliance on File Name or Extension of Externally-Supplied File
+A06 656 Reliance on Security Through Obscurity
+A06 657 Violation of Secure Design Principles
+A06 676 Use of Potentially Dangerous Function
+A06 693 Protection Mechanism Failure
+A06 807 Reliance on Untrusted Inputs in a Security Decision
+A06 841 Improper Enforcement of Behavioral Workflow
+A06 1125 Excessive Attack Surface
 A07 258 Empty Password in Configuration File
 A07 259 Use of Hard-coded Password
 A07 287 Improper Authentication

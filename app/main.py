@@ -50,7 +50,8 @@ app.middleware("http")(require_service_key)
 # In plain English: every failure ends in a short, fixed reply (see app/errors.py). The catch-all is added AFTER
 # the service-key check, which makes it the outermost layer, so it also catches an error inside that check.
 app.middleware("http")(catch_everything)
-app.add_exception_handler(StarletteHTTPException, fixed_http_error)
+# The framework declares its handler type wider than what it really passes for this error, so the one check below is switched off.
+app.add_exception_handler(StarletteHTTPException, fixed_http_error)  # type: ignore[arg-type]
 
 
 # In plain English: the kinds of error whose built-in wording is safe, because it

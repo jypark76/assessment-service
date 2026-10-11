@@ -16,3 +16,7 @@ httpx==0.28.1
 
 # Reads the rendered Kubernetes files in the Kubernetes file checks.
 pyyaml==6.0.3
+
+# Checks the application's Python code for calls with the wrong arguments or the wrong kinds of values
+# before it runs (tests/test_type_checking.py).
+mypy==1.19.1

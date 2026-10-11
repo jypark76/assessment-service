@@ -73,7 +73,9 @@ PERMISSIONS = {
 # A key shorter than the minimum is ignored (it cannot be used). A bad caller name, a caller without
 # permissions in this service, or one key listed for two different callers is a problem.
 def parse_callers(raw):
-    callers, problems, owner_of_key = [], [], {}
+    callers: list = []
+    problems: list = []
+    owner_of_key: dict = {}
     for part in raw.split(","):
         part = part.strip()
         if not part:

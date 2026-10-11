@@ -175,6 +175,7 @@ def test_a_different_grade_for_an_already_graded_version_is_refused():
 # In plain English: a submission that has a grade and is waiting for review cannot be
 # graded again, and neither can an approved one, because approval is final. The reply is
 # fixed wording and nothing is added. The first grade is the control.
+@pytest.mark.owasp("A06", 841)
 def test_a_graded_or_approved_submission_cannot_be_graded():
     waiting = new_submission()
     assert post_grade(waiting).status_code == 201

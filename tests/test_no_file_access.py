@@ -82,6 +82,7 @@ def unexpected(filename, problems):
 # ---------- The real code ----------
 
 @pytest.mark.owasp("A01", 22, 23, 36, 59, 61, 65, 219, 377, 379, 548, 552, 601)
+@pytest.mark.owasp("A06", 73)
 def test_application_code_never_touches_the_file_system_or_redirects():
     files = app_files()
     assert files, "no application files were found to check"
@@ -156,6 +157,7 @@ GOOD = {
 
 @pytest.mark.owasp("A01", 22, 23, 36, 59, 61, 65, 219, 377, 379, 548, 552, 601)
 @pytest.mark.parametrize("label", sorted(BAD))
+@pytest.mark.owasp("A06", 73)
 def test_every_bad_program_is_caught(label):
     assert find_file_access(BAD[label]), label
 

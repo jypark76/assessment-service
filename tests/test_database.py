@@ -49,6 +49,7 @@ def test_ready_fails_quietly_with_a_wrong_password(monkeypatch):
 # means "not allowed" and not "login missing". Then it tries to create a table, which
 # a login that is only allowed to use the database must be refused.
 @pytest.mark.owasp("A01", 276, 732)
+@pytest.mark.owasp("A06", 266, 269)
 def test_limited_login_connects_but_cannot_create_tables():
     with connect() as connection:
         who = connection.execute("SELECT current_user").fetchone()[0]

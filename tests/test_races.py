@@ -172,6 +172,7 @@ def statuses(results):
 # In plain English: a different grade for the same version lands first. The service's own
 # write is refused by the database, it looks again, and it answers 409 "changed". The
 # competitor's grade is the one that stays, and there is exactly one new row.
+@pytest.mark.owasp("A06", 362)
 def test_a_grade_that_loses_to_a_different_grade_gets_a_conflict(monkeypatch):
     submission_id = new_submission()
     competitor = lambda: record_grade(
@@ -193,6 +194,7 @@ def test_a_grade_that_loses_to_a_different_grade_gets_a_conflict(monkeypatch):
 # In plain English: the very same grade lands first (two workers doing the same job). The
 # service's own write is refused, it looks again, finds its own grade already saved, and
 # answers 200 as for a retry. There is still exactly one new row.
+@pytest.mark.owasp("A06", 362)
 def test_a_grade_that_loses_to_the_same_grade_is_treated_as_a_retry(monkeypatch):
     submission_id = new_submission()
     competitor = lambda: record_grade(
@@ -212,6 +214,7 @@ def test_a_grade_that_loses_to_the_same_grade_is_treated_as_a_retry(monkeypatch)
 
 # In plain English: a different review for the same version lands first. The service looks
 # again and answers 409 "changed". The competitor's rejection stays, with one new row.
+@pytest.mark.owasp("A06", 362)
 def test_a_review_that_loses_to_a_different_review_gets_a_conflict(monkeypatch):
     submission_id = graded_submission()
     competitor = lambda: record_review(
@@ -238,6 +241,7 @@ def test_a_review_that_loses_to_a_different_review_gets_a_conflict(monkeypatch):
 
 # In plain English: the very same review lands first. The service looks again, finds its
 # own review already saved and answers 200 as for a retry, with one new row.
+@pytest.mark.owasp("A06", 362)
 def test_a_review_that_loses_to_the_same_review_is_treated_as_a_retry(monkeypatch):
     submission_id = graded_submission()
     competitor = lambda: record_review(
@@ -263,6 +267,7 @@ def test_a_review_that_loses_to_the_same_review_is_treated_as_a_retry(monkeypatc
 # In plain English: eight workers each send a DIFFERENT grade for the same version at the
 # same instant. Exactly one wins with 201 and the other seven get 409. Nobody gets a 500
 # and only one row is added.
+@pytest.mark.owasp("A06", 362)
 def test_eight_different_grades_at_once_have_exactly_one_winner():
     submission_id = new_submission()
     url = f"/submissions/{submission_id}/grades"
@@ -280,6 +285,7 @@ def test_eight_different_grades_at_once_have_exactly_one_winner():
 # In plain English: eight workers send the SAME grade for the same version at the same
 # instant. Exactly one is the first (201) and the other seven are recognised as retries
 # (200). Only one row is added.
+@pytest.mark.owasp("A06", 362)
 def test_eight_identical_grades_at_once_add_one_row():
     submission_id = new_submission()
     url = f"/submissions/{submission_id}/grades"
@@ -294,6 +300,7 @@ def test_eight_identical_grades_at_once_add_one_row():
 # In plain English: eight reviewers each send a DIFFERENT review for the same grade at the
 # same instant (some approve, some reject). Exactly one wins and the rest get 409. Only one
 # row is added.
+@pytest.mark.owasp("A06", 362)
 def test_eight_different_reviews_at_once_have_exactly_one_winner():
     submission_id = graded_submission()
     url = f"/submissions/{submission_id}/reviews"
@@ -320,6 +327,7 @@ def test_eight_different_reviews_at_once_have_exactly_one_winner():
 # In plain English: eight reviewers send the SAME approval at the same instant. Exactly one
 # is the first (201) and the other seven are recognised as retries (200). Only one row is
 # added, so there is still just one approval.
+@pytest.mark.owasp("A06", 362)
 def test_eight_identical_approvals_at_once_add_one_row():
     submission_id = graded_submission()
     url = f"/submissions/{submission_id}/reviews"
