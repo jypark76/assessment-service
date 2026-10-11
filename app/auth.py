@@ -15,7 +15,8 @@
 #   - Every refusal is logged with its reason, the method and the route, so someone trying keys or
 #     calling with a wrong one can be noticed. The line never holds the key, the header or anything a
 #     caller can use to forge a log line, and a flood of refusals is summarized instead of logged one
-#     by one.
+#     by one. The summary is written when the next window starts or, if the refusals stop, by a timer
+#     when the window closes, so the count is never left unreported.
 #
 # What it is not: one shared key says "a trusted caller", not "which person". Real user
 # login comes later.
@@ -79,6 +80,8 @@ _lock = threading.Lock()
 _window_start = None
 _logged_in_window = 0
 _held_back = 0
+_window_id = 0  # changes with every new window, so an old timer can tell it is out of date
+_timer_set = False
 
 
 # In plain English: the clock the refusal log uses. Tests replace it to move time forward.
@@ -88,9 +91,9 @@ def _now():
 
 # In plain English: forgets the current window. Used by tests.
 def reset_refusal_window():
-    global _window_start, _logged_in_window, _held_back
+    global _window_start, _logged_in_window, _held_back, _timer_set
     with _lock:
-        _window_start, _logged_in_window, _held_back = None, 0, 0
+        _window_start, _logged_in_window, _held_back, _timer_set = None, 0, 0, False
 
 
 # In plain English: keeps only plain, harmless characters and cuts the text short, so nothing a caller
@@ -99,21 +102,51 @@ def _safe_text(text, longest):
     return re.sub(r"[^A-Za-z0-9/_.~%\-]", "?", text)[:longest]
 
 
+# In plain English: starts a one-shot timer that calls "function" with the window's number after
+# "delay" seconds. It is a background thread that never keeps the program alive. Tests replace this
+# function to capture the timer instead of waiting for it.
+def _start_timer(delay, function, window_id):
+    timer = threading.Timer(delay, function, args=(window_id,))
+    timer.daemon = True
+    timer.start()
+
+
+# In plain English: what the timer does when its window closes. If refusals were held back in that
+# window and nobody has reported them yet, it reports the count now. If a newer window has already
+# started, or the count was already reported, it does nothing.
+def _flush_window(window_id):
+    global _window_start, _logged_in_window, _held_back, _timer_set
+    with _lock:
+        if window_id != _window_id or _held_back == 0:
+            return
+        held = _held_back
+        _window_start, _logged_in_window, _held_back, _timer_set = None, 0, 0, False
+    log.warning("%s more refusals in the previous %s seconds were not logged one by one", held, REFUSAL_WINDOW_SECONDS)
+
+
 # In plain English: records one refusal, within the limit for the current window. When a new window
 # starts, first says how many refusals the previous one held back.
 def _note_refusal(reason, request):
-    global _window_start, _logged_in_window, _held_back
+    global _window_start, _logged_in_window, _held_back, _window_id, _timer_set
     held = 0
+    timer = None
     with _lock:
         now = _now()
         if _window_start is None or now - _window_start >= REFUSAL_WINDOW_SECONDS:
             held = _held_back
             _window_start, _logged_in_window, _held_back = now, 0, 0
+            _window_id += 1
+            _timer_set = False
         allowed = _logged_in_window < REFUSAL_LOG_LIMIT
         if allowed:
             _logged_in_window += 1
         else:
             _held_back += 1
+            if not _timer_set:
+                _timer_set = True
+                timer = (max(0.0, _window_start + REFUSAL_WINDOW_SECONDS - now), _window_id)
+    if timer:
+        _start_timer(timer[0], _flush_window, timer[1])
     if held:
         log.warning("%s more refusals in the previous %s seconds were not logged one by one", held, REFUSAL_WINDOW_SECONDS)
     if allowed:

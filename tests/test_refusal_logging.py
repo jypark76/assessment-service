@@ -112,3 +112,80 @@ def test_refusing_still_works_exactly_as_before():
     assert bare.get("/assignments").status_code == 401
     assert bare.get("/assignments").json() == {"problem": "A valid service key is required"}
     assert bare.get("/assignments").headers["www-authenticate"] == "Bearer"
+
+
+# ---------- The held-back count is reported even if the refusals stop ----------
+# A flood that ends inside a window must not leave the held-back count unreported. A timer reports it
+# when the window closes. These tests capture the timer instead of waiting for it, and one test uses
+# the real timer with a very short window.
+
+@pytest.fixture
+def timers(monkeypatch):
+    scheduled = []
+    monkeypatch.setattr(auth, "_start_timer", lambda delay, function, window_id: scheduled.append((delay, function, window_id)))
+    return scheduled
+
+
+def test_a_flood_that_stops_inside_the_window_is_still_summarized_by_the_timer(caplog, timers, fresh_window):
+    with caplog.at_level(logging.INFO):
+        for _ in range(auth.REFUSAL_LOG_LIMIT + 7):
+            bare.get("/examples")
+    assert len(timers) == 1, "exactly one timer, however many refusals were held back"
+    delay, function, window_id = timers[0]
+    assert 0 <= delay <= auth.REFUSAL_WINDOW_SECONDS
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        function(window_id)  # the window closes with nobody calling again
+    lines = [r.getMessage() for r in refusals(caplog)]
+    assert len(lines) == 1 and "7 more" in lines[0], lines
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        function(window_id)  # firing twice must not report twice
+    assert refusals(caplog) == []
+
+
+def test_no_timer_is_started_when_nothing_was_held_back(caplog, timers):
+    with caplog.at_level(logging.INFO):
+        for _ in range(auth.REFUSAL_LOG_LIMIT):
+            bare.get("/examples")
+    assert timers == []
+
+
+def test_an_old_timer_does_nothing_once_a_new_window_has_started(caplog, timers, fresh_window):
+    with caplog.at_level(logging.INFO):
+        for _ in range(auth.REFUSAL_LOG_LIMIT + 3):
+            bare.get("/examples")
+        old_delay, old_function, old_id = timers[0]
+        fresh_window["now"] += auth.REFUSAL_WINDOW_SECONDS + 1
+        for _ in range(auth.REFUSAL_LOG_LIMIT + 4):
+            bare.get("/examples")  # a late refusal starts a new window, which then holds back 4 of its own
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        old_function(old_id)  # the old timer finally fires: it must not report the NEW window's count early
+    assert refusals(caplog) == []
+
+
+def test_each_window_gets_its_own_timer(caplog, timers, fresh_window):
+    with caplog.at_level(logging.INFO):
+        for _ in range(auth.REFUSAL_LOG_LIMIT + 2):
+            bare.get("/examples")
+        fresh_window["now"] += auth.REFUSAL_WINDOW_SECONDS + 1
+        for _ in range(auth.REFUSAL_LOG_LIMIT + 2):
+            bare.get("/examples")
+    assert len(timers) == 2
+    assert timers[0][2] != timers[1][2]
+
+
+def test_the_real_timer_reports_the_held_back_count_after_the_window_closes(caplog, monkeypatch):
+    import time
+
+    monkeypatch.setattr(auth, "_now", time.monotonic)
+    monkeypatch.setattr(auth, "REFUSAL_WINDOW_SECONDS", 0.2)
+    auth.reset_refusal_window()
+    with caplog.at_level(logging.INFO):
+        for _ in range(auth.REFUSAL_LOG_LIMIT + 5):
+            bare.get("/examples")
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and not any("5 more" in r.getMessage() for r in refusals(caplog)):
+            time.sleep(0.05)
+    assert any("5 more" in r.getMessage() for r in refusals(caplog)), [r.getMessage() for r in refusals(caplog)]
