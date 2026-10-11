@@ -1,0 +1,47 @@
+# In plain English: checks every outside library this service uses against the public list of known
+# security problems (the PyPI advisory database), using pip-audit. If any library we have locked has a
+# known problem, the check turns red and, once the branch rules on GitHub require it ("audit"), the
+# merge is blocked.
+#
+# It runs on every pull request and every change to main, and also once a week on a timer, because a
+# library that was safe yesterday can have a problem announced today without any change in our code.
+# The scan reads the locked lists (requirements.txt and requirements-dev.txt), so it checks exactly the
+# versions that get installed, and it refuses to run on a list that is missing hashes.
+name: dependency-audit
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+# The workflow only needs to read the code, nothing more.
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The scanner itself is installed from a locked, hash-checked list too.
+      - run: pip install --require-hashes --no-deps -r requirements-audit.txt
+
+      # --disable-pip stops the scanner from resolving anything itself: it audits only the exact versions
+      # written in the locked list. It exits with an error when it finds a known problem, and also when it
+      # cannot reach the advisory database, so a broken scan can never look like a clean one.
+      - name: Audit the libraries the service runs on
+        run: pip-audit --require-hashes --disable-pip --strict -r requirements.txt
+
+      - name: Audit the libraries the tests use
+        run: pip-audit --require-hashes --disable-pip --strict -r requirements-dev.txt
+
+      - name: Audit the scanner's own libraries
+        run: pip-audit --require-hashes --disable-pip --strict -r requirements-audit.txt

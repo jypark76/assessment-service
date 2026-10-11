@@ -26,7 +26,7 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
 
-      - run: pip install -r requirements-dev.txt
+      - run: pip install --require-hashes -r requirements-dev.txt
 
       # The Kubernetes file checks run in their own job below, so skip them here.
       - run: pytest -v --ignore=tests/test_k8s_manifests.py
@@ -89,7 +89,7 @@ jobs:
           docker logs test-db >&2
           exit 1
 
-      - run: pip install -r requirements-dev.txt
+      - run: pip install --require-hashes -r requirements-dev.txt
 
       # The upgrade proof. It starts its OWN throwaway database built the old way,
       # saves an assignment and a submission in it, applies the database changes with
@@ -154,7 +154,7 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
 
-      - run: pip install -r requirements-dev.txt
+      - run: pip install --require-hashes -r requirements-dev.txt
 
       - name: Check the shell scripts
         run: shellcheck k8s/deploy.sh k8s/overlays/local/set-app-password.sh db/check-upgrade.sh

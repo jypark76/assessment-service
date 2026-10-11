@@ -15,9 +15,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Install the libraries first. Docker remembers this step, so rebuilding is
-# fast as long as requirements.txt has not changed.
+# fast as long as requirements.txt has not changed. requirements.txt is a lock file: every library
+# (and every library those need) is pinned to one version and its file hashes. --require-hashes makes
+# the build FAIL if any downloaded file differs by even one byte, and --no-deps stops pip from
+# fetching anything the lock does not list.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --require-hashes --no-deps -r requirements.txt
 
 # Never run the service as the all-powerful root user inside the box.
 RUN useradd --create-home appuser
