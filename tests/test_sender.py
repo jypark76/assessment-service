@@ -216,6 +216,7 @@ def test_a_bad_row_is_complained_about_once_not_every_round(caplog):
     assert caplog.text.count(str(bad[0])) == 1
 
 
+@pytest.mark.owasp("A09", 532)
 def test_a_bad_row_is_logged_by_id_only_never_with_student_text(caplog):
     bad = row(submission_text="SECRET-MARKER essay", ai_grade="")
     store = FakeStore([bad])

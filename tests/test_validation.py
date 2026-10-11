@@ -16,6 +16,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.main import SAFE_ERROR_KINDS, bad_input, safe_field, safe_reason
 
+import pytest
+
 
 # In plain English: a tiny stand-in service used only in these tests. It has one
 # route that expects an assignment ID, a short note and nothing else, and it uses
@@ -76,6 +78,7 @@ def test_an_invented_field_name_is_never_echoed():
 
 
 # In plain English: a text that is too long is refused with the rule, not the text.
+@pytest.mark.owasp("A05", 20)
 def test_too_long_text_is_refused_without_repeating_it():
     data = good_probe()
     data["note"] = "SECRET-MARKER-" + "x" * 50
