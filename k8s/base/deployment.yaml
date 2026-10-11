@@ -51,8 +51,9 @@ spec:
                   name: assessment-db
                   key: app-password
             # The shared service key callers must present. Like the password it comes from
-            # a Secret created by hand, never from a file. It may list several keys,
-            # separated by commas, so a key can be replaced without downtime.
+            # a Secret created by hand, never from a file. Each entry is name:key, for example
+            # frontend-service:<key>, separated by commas. A caller may have two keys while one is replaced, and a plain
+            # entry with no name still works as the full-access caller "legacy" (see app/auth.py).
             - name: SERVICE_KEYS
               valueFrom:
                 secretKeyRef:

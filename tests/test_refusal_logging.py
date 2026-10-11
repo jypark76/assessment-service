@@ -178,15 +178,28 @@ def test_each_window_gets_its_own_timer(caplog, timers, fresh_window):
 
 
 def test_the_real_timer_reports_the_held_back_count_after_the_window_closes(caplog, monkeypatch):
+    import re
     import time
 
     monkeypatch.setattr(auth, "_now", time.monotonic)
-    monkeypatch.setattr(auth, "REFUSAL_WINDOW_SECONDS", 0.2)
+    monkeypatch.setattr(auth, "REFUSAL_WINDOW_SECONDS", 0.5)
+    monkeypatch.setattr(auth, "REFUSAL_LOG_LIMIT", 1)  # one line per window, so any window with two or more requests needs a summary
     auth.reset_refusal_window()
+    total = 30
+
+    def accounted_for():
+        # Every refusal is either logged on its own line or counted in a "N more refusals" summary. How the
+        # requests fall across the half-second windows depends on how fast this computer is, so the test
+        # checks that nothing is lost instead of expecting one exact split.
+        logged = sum(1 for r in refusals(caplog) if "service key refused" in r.getMessage())
+        reported = sum(int(m.group(1)) for r in refusals(caplog) if (m := re.match(r"(\d+) more refusals", r.getMessage())))
+        return logged + reported
+
     with caplog.at_level(logging.INFO):
-        for _ in range(auth.REFUSAL_LOG_LIMIT + 5):
-            bare.get("/examples")
-        deadline = time.monotonic() + 3
-        while time.monotonic() < deadline and not any("5 more" in r.getMessage() for r in refusals(caplog)):
+        for _ in range(total):
+            bare.get("/assignments")
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and accounted_for() < total:
             time.sleep(0.05)
-    assert any("5 more" in r.getMessage() for r in refusals(caplog)), [r.getMessage() for r in refusals(caplog)]
+    assert accounted_for() == total, [r.getMessage() for r in refusals(caplog)]
+    assert any("more refusals" in r.getMessage() for r in refusals(caplog)), "no summary line was written by the timer"

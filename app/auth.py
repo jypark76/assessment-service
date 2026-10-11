@@ -1,12 +1,19 @@
-# In plain English: the shared service key. Every route except the health checks needs the
-# header "Authorization: Bearer <key>". The key is a long secret that only trusted callers
-# (the other services) know. It comes from the setting SERVICE_KEYS, which Kubernetes fills
-# from a Secret. More than one key may be listed, separated by commas, so a key can be
-# replaced without downtime: add the new one, switch the callers over, remove the old one.
+# In plain English: the service keys. Every route except the health checks needs the header
+# "Authorization: Bearer <key>". Each key belongs to one NAMED caller, and each caller may use only the routes
+# listed for it in PERMISSIONS below. The keys come from the setting SERVICE_KEYS, which Kubernetes fills from a
+# Secret. Write it as comma-separated entries like "frontend-service:<key>,grader-service:<key>". A caller may
+# have two keys at once, so a key can be replaced without downtime: add the new one, switch the caller over,
+# remove the old one. A plain entry with no name ("<key>") still works and counts as the caller "legacy", which
+# may use every route; it exists only so that switching to named keys breaks nothing, and it should be removed
+# as soon as every caller has its own key.
 #
 # What it promises:
 #   - A call without the right key gets 401 with the same fixed reply every time, so the
 #     reply never says what was wrong and never repeats what was sent.
+#   - A call with a valid key on a route that its caller may not use gets 403 with one fixed reply. A route
+#     that is not listed for a caller is refused; nothing is allowed by default.
+#   - A setting that makes no sense (a bad caller name, a caller this service has no permissions for, one key
+#     listed for two callers) is treated as "no usable key": the service answers 503 and stays closed.
 #   - If no usable key is configured the service answers 503 and stays closed. It never
 #     falls back to "open".
 #   - A key shorter than 32 characters is not usable, so a weak key cannot be set by mistake.
@@ -18,8 +25,7 @@
 #     by one. The summary is written when the next window starts or, if the refusals stop, by a timer
 #     when the window closes, so the count is never left unreported.
 #
-# What it is not: one shared key says "a trusted caller", not "which person". Real user
-# login comes later.
+# What it is not: a key says "which service", not "which person". Real user login comes later.
 import hmac
 import logging
 import os
@@ -29,6 +35,7 @@ import time
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from starlette.routing import Match
 
 MIN_KEY_LENGTH = 32
 
@@ -45,12 +52,53 @@ PATH_LOG_LENGTH = 100
 OPEN_PATHS = {"/health", "/ready"}
 
 
-# In plain English: reads the configured keys fresh on every call (so tests and key
-# rotation take effect at once) and keeps only the usable ones.
-def configured_keys():
-    raw = os.environ.get("SERVICE_KEYS", "")
-    keys = [part.strip() for part in raw.split(",")]
-    return [key.encode("utf-8") for key in keys if len(key) >= MIN_KEY_LENGTH]
+# In plain English: the callers that exist and the routes each may use. A route is written as the method and
+# the route's address pattern, for example "POST /examples/search". ALL_ROUTES ("*") means every route. A
+# caller that is missing here cannot be named in SERVICE_KEYS, and a route that a caller does not list is
+# refused for it. tests/test_caller_permissions.py repeats this table in full and fails if the two differ.
+LEGACY_CALLER = "legacy"
+ALL_ROUTES = "*"
+CALLER_NAME = re.compile(r"[a-z][a-z0-9-]{1,39}")
+PERMISSIONS = {
+    LEGACY_CALLER: ALL_ROUTES,
+    # The grader talks to this service over Kafka, not over the web, so it has no entry here: a key
+    # named grader-service would make the whole setting invalid and the service would stay closed.
+    "frontend-service": ALL_ROUTES,
+}
+
+
+# In plain English: reads the SERVICE_KEYS text into a list of (caller name, key) pairs, and a list of problems.
+# A key shorter than the minimum is ignored (it cannot be used). A bad caller name, a caller without
+# permissions in this service, or one key listed for two different callers is a problem.
+def parse_callers(raw):
+    callers, problems, owner_of_key = [], [], {}
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        name, separator, key = part.partition(":")
+        if not separator:
+            name, key = LEGACY_CALLER, part
+        elif not CALLER_NAME.fullmatch(name):
+            problems.append("a caller name is not valid")
+            continue
+        if name not in PERMISSIONS:
+            problems.append("a caller name has no permissions in this service")
+            continue
+        if len(key) < MIN_KEY_LENGTH:
+            continue
+        if owner_of_key.setdefault(key, name) != name:
+            problems.append("one key is listed for two callers")
+            continue
+        callers.append((name, key.encode("utf-8")))
+    return callers, problems
+
+
+# In plain English: reads the setting fresh on every call (so tests and key rotation take effect at once). If
+# the setting has any problem, no caller is usable at all: it is better to stay closed than to guess.
+def configured_callers():
+    callers, problems = parse_callers(os.environ.get("SERVICE_KEYS", ""))
+    return ([], problems) if problems else (callers, problems)
 
 
 # In plain English: pulls the key out of "Bearer <key>". Anything that does not have
@@ -64,16 +112,27 @@ def presented_key(header):
     return parts[1].encode("utf-8")
 
 
-# In plain English: true only if the presented key equals one of the configured keys.
-# It checks all of them, without stopping at the first match, to keep the timing even.
-def key_is_valid(presented, keys):
+# In plain English: finds which caller owns the presented key, or None. It compares against every configured
+# key without stopping at the first match, to keep the timing even.
+def authenticate(presented, callers):
     if presented is None:
-        return False
-    matched = False
-    for key in keys:
-        if hmac.compare_digest(presented, key):
-            matched = True
-    return matched
+        return None
+    found = None
+    for name, key in callers:
+        if hmac.compare_digest(presented, key) and found is None:
+            found = name
+    return found
+
+
+# In plain English: the route this request is for, written as "METHOD /address/{pattern}", or None when no
+# route matches (an unknown address or a wrong method, which the framework answers with its own fixed 404 or
+# 405). Looking it up here, before the route runs, lets the guard decide who may use it.
+def route_key_of(request: Request):
+    for route in request.app.routes:
+        match, _ = route.matches(request.scope)
+        if match == Match.FULL:
+            return f"{request.method} {route.path}"
+    return None
 
 
 _lock = threading.Lock()
@@ -126,7 +185,7 @@ def _flush_window(window_id):
 
 # In plain English: records one refusal, within the limit for the current window. When a new window
 # starts, first says how many refusals the previous one held back.
-def _note_refusal(reason, request):
+def _note_refusal(reason, request, caller=None):
     global _window_start, _logged_in_window, _held_back, _window_id, _timer_set
     held = 0
     timer = None
@@ -152,30 +211,38 @@ def _note_refusal(reason, request):
     if allowed:
         raw_path = (request.scope.get("raw_path") or request.url.path.encode("utf-8", "replace")).decode("latin-1")
         log.warning(
-            "service key refused: reason=%s method=%s path=%s",
+            "service key refused: reason=%s%s method=%s path=%s",
             reason,
+            f" caller={caller}" if caller else "",
             _safe_text(request.method, 10),
             _safe_text(raw_path, PATH_LOG_LENGTH),
         )
 
 
 # In plain English: the guard that runs in front of every request (installed in main.py).
-# It lets the open paths through, refuses with 503 when no key is configured, refuses
-# with 401 when the key is missing or wrong, and otherwise lets the request continue.
+# It lets the open paths through, refuses with 503 when no usable key is configured, refuses
+# with 401 when the key is missing or wrong, refuses with 403 when the key is valid but its caller
+# may not use this route, and otherwise lets the request continue.
 async def require_service_key(request: Request, call_next):
     if request.url.path in OPEN_PATHS:
         return await call_next(request)
-    keys = configured_keys()
-    if not keys:
+    callers, _ = configured_callers()
+    if not callers:
         _note_refusal("not_configured", request)
         return JSONResponse(status_code=503, content={"problem": "Service key is not configured"})
     header = request.headers.get("authorization")
     presented = presented_key(header)
-    if not key_is_valid(presented, keys):
+    caller = authenticate(presented, callers)
+    if caller is None:
         _note_refusal("missing" if header is None else ("malformed" if presented is None else "wrong"), request)
         return JSONResponse(
             status_code=401,
             content={"problem": "A valid service key is required"},
             headers={"WWW-Authenticate": "Bearer"},
         )
+    permitted = PERMISSIONS[caller]
+    route_key = route_key_of(request)
+    if route_key is not None and permitted != ALL_ROUTES and route_key not in permitted:
+        _note_refusal("forbidden", request, caller)
+        return JSONResponse(status_code=403, content={"problem": "This key is not allowed to use this route"})
     return await call_next(request)
