@@ -32,7 +32,7 @@ def require_test_database():
 # matching header. The key is a made-up value that exists only in tests.
 TEST_KEY = "test-only-key-0123456789abcdef0123456789"
 AUTH_HEADERS = {"Authorization": f"Bearer {TEST_KEY}"}
-os.environ["SERVICE_KEYS"] = TEST_KEY
+os.environ["SERVICE_KEYS"] = f"frontend-service:{TEST_KEY}"
 
 
 # In plain English: before any test runs, check every OWASP tag. A malformed tag (wrong category, a

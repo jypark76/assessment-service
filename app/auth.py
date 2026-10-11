@@ -3,9 +3,8 @@
 # listed for it in PERMISSIONS below. The keys come from the setting SERVICE_KEYS, which Kubernetes fills from a
 # Secret. Write it as comma-separated entries like "frontend-service:<key>,grader-service:<key>". A caller may
 # have two keys at once, so a key can be replaced without downtime: add the new one, switch the caller over,
-# remove the old one. A plain entry with no name ("<key>") still works and counts as the caller "legacy", which
-# may use every route; it exists only so that switching to named keys breaks nothing, and it should be removed
-# as soon as every caller has its own key.
+# remove the old one. Every entry must carry a caller name: a plain key with no name
+# is a problem, and a problem leaves the whole service closed.
 #
 # What it promises:
 #   - A call without the right key gets 401 with the same fixed reply every time, so the
@@ -58,11 +57,9 @@ OPEN_PATHS = {"/health", "/ready"}
 # the route's address pattern, for example "POST /examples/search". ALL_ROUTES ("*") means every route. A
 # caller that is missing here cannot be named in SERVICE_KEYS, and a route that a caller does not list is
 # refused for it. tests/test_caller_permissions.py repeats this table in full and fails if the two differ.
-LEGACY_CALLER = "legacy"
 ALL_ROUTES = "*"
 CALLER_NAME = re.compile(r"[a-z][a-z0-9-]{1,39}")
 PERMISSIONS = {
-    LEGACY_CALLER: ALL_ROUTES,
     # The grader talks to this service over Kafka, not over the web, so it has no entry here: a key
     # named grader-service would make the whole setting invalid and the service would stay closed.
     "frontend-service": ALL_ROUTES,
@@ -82,8 +79,9 @@ def parse_callers(raw):
             continue
         name, separator, key = part.partition(":")
         if not separator:
-            name, key = LEGACY_CALLER, part
-        elif not CALLER_NAME.fullmatch(name):
+            problems.append("an entry has no caller name")
+            continue
+        if not CALLER_NAME.fullmatch(name):
             problems.append("a caller name is not valid")
             continue
         if name not in PERMISSIONS:
