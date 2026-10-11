@@ -66,6 +66,18 @@ def app_files():
     return sorted(APP.glob("*.py"))
 
 
+# In plain English: the one module allowed to open a file, and exactly what it may do. app/secret_files.py reads a
+# mounted Secret; it may import PurePosixPath to check the path and call open once. Anything else it does, or
+# anything any other file does, still fails.
+ALLOWED = {"secret_files.py": {"imports from pathlib", "uses open"}}
+
+
+# In plain English: the problems left after removing what the allowance excuses for this file.
+def unexpected(filename, problems):
+    excused = ALLOWED.get(filename, set())
+    return [problem for problem in problems if problem[0] not in excused]
+
+
 
 # ---------- The real code ----------
 
@@ -73,7 +85,7 @@ def app_files():
 def test_application_code_never_touches_the_file_system_or_redirects():
     files = app_files()
     assert files, "no application files were found to check"
-    found = {path.name: find_file_access(path.read_text(encoding="utf-8")) for path in files}
+    found = {path.name: unexpected(path.name, find_file_access(path.read_text(encoding="utf-8"))) for path in files}
     assert {name: problems for name, problems in found.items() if problems} == {}
 
 
@@ -81,6 +93,27 @@ def test_application_code_never_touches_the_file_system_or_redirects():
 def test_the_check_covers_the_real_application_files():
     names = {path.name for path in app_files()}
     assert {"main.py", "auth.py", "db.py", "errors.py"} <= names
+
+
+@pytest.mark.owasp("A01", 22, 23, 36, 59, 61, 65, 219, 377, 379, 548, 552, 601)
+def test_every_allowance_is_still_needed_and_opens_exactly_one_file():
+    # An allowance that nothing uses would let a future file read through under the same name.
+    for filename, labels in ALLOWED.items():
+        path = APP / filename
+        if not path.exists():
+            continue
+        problems = find_file_access(path.read_text(encoding="utf-8"))
+        assert {label for label, _ in problems} == labels, (filename, problems)
+        assert sum(1 for label, _ in problems if label == "uses open") == 1
+
+
+@pytest.mark.owasp("A01", 22, 23, 36, 59, 61, 65, 219, 377, 379, 548, 552, 601)
+def test_the_allowed_module_is_still_caught_when_it_does_anything_else():
+    extra = "import os\n\ndef f(path):\n    return os.listdir(path)\n"
+    assert unexpected("secret_files.py", find_file_access(extra))
+    assert unexpected("secret_files.py", find_file_access("from pathlib import Path\n"))  # only PurePosixPath's module label is excused, not Path itself
+    assert unexpected("secret_files.py", find_file_access("def f(p):\n    return open(p).read()\n")) == []
+    assert unexpected("other.py", find_file_access("def f(p):\n    return open(p).read()\n"))
 
 
 # ---------- The check proves itself ----------

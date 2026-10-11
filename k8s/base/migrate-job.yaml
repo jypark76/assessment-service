@@ -39,10 +39,16 @@ spec:
       restartPolicy: Never
       enableServiceLinks: false
       # Runs as a normal user (1001 is the user inside the Liquibase image), never root.
+      # No Kubernetes API token: this pod never talks to the Kubernetes API, and a stolen token would be a
+      # free key to it.
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
         runAsGroup: 1001
+        # The container runtime's default filter blocks dozens of rarely used system calls.
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: liquibase
           image: liquibase/liquibase

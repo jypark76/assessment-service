@@ -84,6 +84,7 @@ def readable_text_files():
 
 @pytest.mark.owasp("A01", 540, 615, 538)
 @pytest.mark.owasp("A07", 259, 798)
+@pytest.mark.owasp("A02", 260)
 def test_no_file_in_the_repo_holds_a_secret():
     problems = []
     for relative, text in readable_text_files():
@@ -108,6 +109,7 @@ def test_no_file_is_named_like_a_secret():
 
 @pytest.mark.owasp("A01", 538, 540)
 @pytest.mark.owasp("A07", 259, 798)
+@pytest.mark.owasp("A02", 260)
 def test_no_kubernetes_secret_manifest_is_saved_even_as_a_template():
     problems = [relative for relative, text in readable_text_files() if relative.endswith((".yaml", ".yml")) and re.search(r"(?m)^kind:\s*Secret\s*$", text)]
     assert problems == []

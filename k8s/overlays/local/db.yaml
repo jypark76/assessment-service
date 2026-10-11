@@ -44,6 +44,13 @@ spec:
       labels:
         app: assessment-db
     spec:
+      # No Kubernetes API token: this pod never talks to the Kubernetes API, and a stolen token would be a
+      # free key to it.
+      automountServiceAccountToken: false
+      securityContext:
+        # The container runtime's default filter blocks dozens of rarely used system calls.
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: postgres
           # Plain Postgres. This service needs no add-ons.

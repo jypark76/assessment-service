@@ -32,6 +32,15 @@ A01 749 Exposed Dangerous Method or Function
 A01 862 Missing Authorization
 A01 863 Incorrect Authorization
 A01 918 Server-Side Request Forgery (SSRF)
+A02 15 External Control of System or Configuration Setting
+A02 16 Configuration
+A02 260 Password in Configuration File
+A02 489 Active Debug Code
+A02 526 Exposure of Sensitive Information Through Environmental Variables
+A02 547 Use of Hard-coded, Security-relevant Constants
+A02 611 Improper Restriction of XML External Entity Reference
+A02 776 Improper Restriction of Recursive Entity References in DTDs ('XML Entity Expansion')
+A02 942 Permissive Cross-domain Policy with Untrusted Domains
 A03 447 Use of Obsolete Function
 A03 1035 2017 Top 10 A9: Using Components with Known Vulnerabilities
 A03 1104 Use of Unmaintained Third Party Components

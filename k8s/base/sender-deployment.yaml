@@ -24,27 +24,54 @@ spec:
       labels:
         app: assessment-sender
     spec:
+      # No Kubernetes API token: this pod never talks to the Kubernetes API, and a stolen token would be a
+      # free key to it.
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000
+        # Lets the user above read the mounted Secret files.
+        fsGroup: 1000
+        # The container runtime's default filter blocks dozens of rarely used system calls.
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        # A small, size-limited scratch folder, because the root filesystem is read-only.
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: db-password
+          secret:
+            secretName: assessment-db
+            defaultMode: 0440
+            items:
+              - key: app-password
+                path: app-password
       containers:
         - name: assessment-sender
           # Same image name as the service; each overlay adds the version tag.
           image: assessment-service
           imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: db-password
+              mountPath: /etc/secrets/db
+              readOnly: true
           command: ["python", "-m", "app.sender"]
           envFrom:
             - configMapRef:
                 name: assessment-service-config
           env:
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: assessment-db
-                  key: app-password
+            # DB_PASSWORD is read from a file that Kubernetes mounts from the Secret (see app/secret_files.py),
+            # not passed as an environment variable.
+            - name: DB_PASSWORD_FILE
+              value: /etc/secrets/db/app-password
           securityContext:
             allowPrivilegeEscalation: false
+            # Nothing in the image can be changed while it runs. Anything that must be written goes in /tmp.
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           resources:
