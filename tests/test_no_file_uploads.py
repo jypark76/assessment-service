@@ -38,8 +38,9 @@ def find_problems(source, name="app/x.py"):
         elif isinstance(node, ast.Attribute):
             if node.attr in BANNED_NAMES:
                 problems.append(f"{name}:{node.lineno}: uses '{node.attr}'")
-        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in BANNED_METHODS:
-            problems.append(f"{name}:{node.lineno}: reads a request as '{node.func.attr}()'")
+            # A reference counts, not only a call: `g = request.form; await g()` reads a form just the same.
+            if node.attr in BANNED_METHODS:
+                problems.append(f"{name}:{node.lineno}: reads a request as '.{node.attr}'")
     return problems
 
 
@@ -63,6 +64,10 @@ def test_the_check_covers_the_real_application_files():
 
 
 BAD_PROGRAMS = {
+    'form referenced then called later': 'async def f(r):\n    g = r.form\n    return await g()\n',
+    'stream referenced then called later': 'def f(r):\n    g = r.stream\n    return g()\n',
+    'form passed as a value': 'def f(r):\n    return run(r.form)\n',
+    'stream passed as a value': 'def f(r):\n    return run(r.stream)\n',
     "UploadFile": "from fastapi import UploadFile\n",
     "File": "from fastapi import File\n",
     "Form": "from fastapi import Form\n",

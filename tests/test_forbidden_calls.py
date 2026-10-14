@@ -18,7 +18,7 @@ APP = Path(__file__).resolve().parent.parent / "app"
 
 # Modules that are never imported at all: they run commands, load code or objects from data, or
 # reach outside the program in ways this service has no need for.
-FORBIDDEN_MODULES = {"subprocess", "pickle", "cPickle", "marshal", "shelve", "ctypes", "runpy", "code", "pty", "importlib"}
+FORBIDDEN_MODULES = {"subprocess", "pickle", "cPickle", "marshal", "shelve", "ctypes", "runpy", "code", "pty", "importlib", "builtins"}
 
 # Calls that are forbidden even though the module itself is allowed: (module, function).
 FORBIDDEN_CALLS = {
@@ -29,14 +29,19 @@ FORBIDDEN_CALLS = {
         "spawnl", "spawnle", "spawnlp", "spawnlpe", "spawnv", "spawnve", "spawnvp", "spawnvpe",
         "posix_spawn", "posix_spawnp",
     )
-} | {("yaml", name) for name in ("load", "load_all", "unsafe_load", "unsafe_load_all")}
+} | {("yaml", name) for name in ("load", "load_all", "unsafe_load", "unsafe_load_all")} | {("operator", name) for name in ("methodcaller", "attrgetter")} | {("types", name) for name in ("FunctionType", "CodeType", "LambdaType", "MethodType")}
 
 # Built-in functions that run text as code, or import by name.
 FORBIDDEN_BUILTINS = {"eval", "exec", "compile", "__import__"}
 
-# Built-ins that choose an attribute by name. They are fine with a fixed word and forbidden with a
-# name that could come from outside, because that is how "unsafe reflection" starts.
+# Built-ins that choose an attribute by name. They are forbidden outright, even with a fixed word: `getattr(os, "system")` does
+# exactly what `os.system` does, so allowing the fixed-word form would let every other ban be walked around.
 DYNAMIC_ATTRIBUTE_BUILTINS = {"getattr", "setattr", "delattr"}
+# Names that are never allowed at all, not even as a value (`f = eval`) or an argument (`map(eval, x)`): each can reach any name,
+# attribute or code by text.
+FORBIDDEN_NAMES = FORBIDDEN_BUILTINS | DYNAMIC_ATTRIBUTE_BUILTINS | {"globals", "locals", "vars"}
+# Attributes that reach into the insides of objects and modules.
+DANGEROUS_ATTRIBUTES = {"__dict__", "__getattribute__", "__globals__", "__builtins__", "__import__", "__subclasses__", "__bases__", "__mro__", "__code__", "__closure__", "__class__"}
 
 
 # In plain English: reads one program's text and returns a list of plain sentences, one per forbidden
@@ -70,10 +75,8 @@ def find_forbidden(source, name="<code>"):
         if isinstance(func, ast.Name):
             if func.id in FORBIDDEN_BUILTINS:
                 problems.append(f"{name}:{node.lineno}: calls forbidden built-in '{func.id}'")
-            elif func.id in DYNAMIC_ATTRIBUTE_BUILTINS:
-                chosen = node.args[1] if len(node.args) > 1 else None
-                if not (isinstance(chosen, ast.Constant) and isinstance(chosen.value, str)):
-                    problems.append(f"{name}:{node.lineno}: '{func.id}' with a name that is not a fixed word")
+            elif func.id in FORBIDDEN_NAMES:
+                problems.append(f"{name}:{node.lineno}: calls forbidden built-in '{func.id}'")
             elif imported_functions.get(func.id) in FORBIDDEN_CALLS:
                 module, function = imported_functions[func.id]
                 problems.append(f"{name}:{node.lineno}: calls forbidden function '{module}.{function}'")
@@ -81,6 +84,21 @@ def find_forbidden(source, name="<code>"):
             module = module_names.get(func.value.id, func.value.id)
             if (module, func.attr) in FORBIDDEN_CALLS:
                 problems.append(f"{name}:{node.lineno}: calls forbidden function '{module}.{func.attr}'")
+
+    # A forbidden thing used as a VALUE does exactly what calling it does (`f = os.system; f("ls")`, `map(eval, x)`), so a bare reference
+    # is refused too, not only a call. The attributes that reach into the insides of objects are refused anywhere, and so is `import *`.
+    parents = {child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
+    for node in ast.walk(tree):
+        called = isinstance(parents.get(node), ast.Call) and parents[node].func is node
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id in FORBIDDEN_NAMES and not called:
+            problems.append(f"{name}:{node.lineno}: uses forbidden built-in '{node.id}' as a value")
+        elif isinstance(node, ast.Attribute):
+            if node.attr in DANGEROUS_ATTRIBUTES:
+                problems.append(f"{name}:{node.lineno}: uses '{node.attr}', which reaches into the insides of an object or module")
+            elif isinstance(node.value, ast.Name) and not called and (module_names.get(node.value.id, node.value.id), node.attr) in FORBIDDEN_CALLS:
+                problems.append(f"{name}:{node.lineno}: uses forbidden function '{node.value.id}.{node.attr}' as a value")
+        elif isinstance(node, ast.ImportFrom) and any(alias.name == "*" for alias in node.names):
+            problems.append(f"{name}:{node.lineno}: 'import *' can silently re-bind any name")
     return problems
 
 
@@ -116,6 +134,31 @@ def test_the_check_covers_the_real_application_files():
 # ---------------------------------------------------------------------------
 
 BAD_PROGRAMS = {
+    'eval renamed': "e = eval\ne('1')\n",
+    'eval passed as a value': 'def f(x):\n    return map(eval, x)\n',
+    'exec as a value': 'g = exec\n',
+    'compile as a value': 'c = compile\n',
+    'getattr with a fixed word on os': "import os\ngetattr(os, 'system')('ls')\n",
+    'getattr on the built-ins': "getattr(__builtins__, 'eval')('1')\n",
+    'globals': 'def f():\n    return globals()\n',
+    'locals': 'def f():\n    return locals()\n',
+    'vars': 'def f(o):\n    return vars(o)\n',
+    'os.system renamed': "import os\nf = os.system\nf('ls')\n",
+    'os.system passed as a value': 'import os\nrun = [os.system]\n',
+    'os.system under a module alias passed as a value': 'import os as o\nf = o.system\n',
+    'functools.partial on os.system': "import functools, os\nfunctools.partial(os.system, 'ls')()\n",
+    'star import': "from os import *\nsystem('ls')\n",
+    'the dictionary of a module': "import os\nos.__dict__['system']('ls')\n",
+    'the globals of a function': "def f():\n    pass\nf.__globals__['x'] = 1\n",
+    'the built-ins of a function': 'def f():\n    pass\nf.__builtins__\n',
+    'the subclasses of a class': 'object.__subclasses__()\n',
+    'a class bases walk': 'x = ().__class__.__bases__\n',
+    'operator.methodcaller': "import operator\noperator.methodcaller('system', 'ls')(os)\n",
+    'operator.attrgetter': "import operator\noperator.attrgetter('system')(os)\n",
+    'types.FunctionType': 'import types\ntypes.FunctionType(c, g)\n',
+    'types.CodeType': 'import types\ntypes.CodeType(1)\n',
+    'the builtins module': "import builtins\nbuiltins.eval('1')\n",
+    'the builtins module from-import': 'from builtins import eval as e\n',
     "import of subprocess": "import subprocess\n",
     "import subprocess with a nickname": "import subprocess as sp\nsp.run(['ls'])\n",
     "from subprocess import": "from subprocess import run\n",
@@ -144,7 +187,6 @@ BAD_PROGRAMS = {
 
 GOOD_PROGRAMS = {
     "yaml.safe_load": "import yaml\nyaml.safe_load('a: 1')\n",
-    "getattr with a fixed word": "def f(x):\n    return getattr(x, 'name')\n",
     "plain os use": "import os\nvalue = os.environ.get('A')\npath = os.path.join('a', 'b')\n",
     "the word in a comment": "# we never call eval or subprocess or os.system here\nx = 1\n",
     "the word in a string": "message = 'do not use eval or pickle'\n",

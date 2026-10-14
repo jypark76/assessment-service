@@ -116,7 +116,20 @@ def find_problems(source, filename, allowed=ALLOWED_GENERIC, quiet=ALLOWED_QUIET
             problems.append(("debug leftover", node.lineno))
         if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] in BANNED_MODULES:
             problems.append(("debug leftover", node.lineno))
-    return sorted(problems, key=lambda p: p[1])
+    for node in ast.walk(tree):
+        # A return, break or continue inside "finally" silently throws away any error in flight.
+        if isinstance(node, ast.Try):
+            for statement in node.finalbody:
+                for part in ast.walk(statement):
+                    if isinstance(part, (ast.Return, ast.Break, ast.Continue)) and function_of(part) is function_of(node):
+                        problems.append(("return or break in finally swallows errors", part.lineno))
+        # print and breakpoint used as a VALUE are the same leftover as calling them.
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id in BANNED_CALLS and not (isinstance(parent.get(node), ast.Call) and parent[node].func is node):
+            problems.append(("debug leftover", node.lineno))
+        # contextlib.suppress does what an empty handler does.
+        if (isinstance(node, ast.Name) and node.id == "suppress") or (isinstance(node, ast.Attribute) and node.attr == "suppress"):
+            problems.append(("handler does nothing", node.lineno))
+    return sorted(set(problems), key=lambda p: p[1])
 
 
 def app_files():
@@ -152,6 +165,14 @@ def test_every_allowed_generic_catch_still_exists_and_is_needed():
 # ---------- The check proves itself ----------
 
 BAD = {
+    'contextlib.suppress': 'import contextlib\n\ndef f():\n    with contextlib.suppress(ValueError):\n        g()\n',
+    'suppress from the import': 'from contextlib import suppress\n\ndef f():\n    with suppress(Exception):\n        g()\n',
+    'print renamed': "p = print\n\ndef f():\n    p('x')\n",
+    'print passed as a value': 'def f(x):\n    return list(map(print, x))\n',
+    'breakpoint renamed': 'b = breakpoint\n',
+    'return in finally': 'def f():\n    try:\n        g()\n    finally:\n        return 1\n',
+    'break in finally': 'def f(x):\n    for i in x:\n        try:\n            g()\n        finally:\n            break\n',
+    'continue in finally': 'def f(x):\n    for i in x:\n        try:\n            g()\n        finally:\n            continue\n',
     "bare except": "def f():\n    try:\n        g()\n    except:\n        return 1\n",
     "generic except": "def f():\n    try:\n        g()\n    except Exception:\n        return 1\n",
     "generic except in a tuple": "def f():\n    try:\n        g()\n    except (ValueError, Exception):\n        return 1\n",
@@ -175,6 +196,8 @@ BAD = {
 }
 
 GOOD = {
+    'a return inside a function defined in finally': 'def f():\n    try:\n        g()\n    finally:\n        def h():\n            return 1\n',
+    'a plain finally': 'def f():\n    try:\n        g()\n    finally:\n        close()\n',
     "specific catches": "def f():\n    try:\n        g()\n    except (ValueError, KeyError):\n        return 1\n",
     "a handler that acts": "def f():\n    try:\n        g()\n    except ValueError as e:\n        log.warning('x %s', type(e).__name__)\n        raise\n",
     "connection with with": "def f():\n    with connect() as c:\n        c.execute('x')\n",

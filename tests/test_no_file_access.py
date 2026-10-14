@@ -24,7 +24,8 @@ FILE_MODULES = {"pathlib", "shutil", "tempfile", "glob", "fnmatch", "zipfile", "
 # The only things the code may use from the os module: reading environment variables.
 OS_ALLOWED = {"environ", "getenv"}
 # Names that read, write, serve or redirect.
-BANNED_NAMES = {"open", "Path", "PurePath", "FileResponse", "StaticFiles", "RedirectResponse", "send_file", "send_from_directory"}
+BANNED_NAMES = {"open", "Path", "PurePath", "FileResponse", "StaticFiles", "RedirectResponse", "send_file", "send_from_directory",
+                "FileIO", "open_code", "fdopen", "TextIOWrapper", "BufferedReader", "BufferedWriter", "BufferedRandom", "makefile"}
 # Method names that touch files or folders.
 BANNED_METHODS = {"read_text", "write_text", "read_bytes", "write_bytes", "mkdir", "rmdir", "unlink", "iterdir", "rglob", "symlink_to", "hardlink_to", "touch", "chmod", "rename", "resolve"}
 
@@ -120,6 +121,12 @@ def test_the_allowed_module_is_still_caught_when_it_does_anything_else():
 # ---------- The check proves itself ----------
 
 BAD = {
+    'io.FileIO': "import io\nio.FileIO('x')\n",
+    'io.open_code': "import io\nio.open_code('x')\n",
+    'a text wrapper': 'import io\nio.TextIOWrapper(x)\n',
+    'a buffered reader': 'import io\nio.BufferedReader(x)\n',
+    'a socket file': 'def f(s):\n    return s.makefile()\n',
+    'star import from os': 'from os import *\n',
     "open a file": "def f(name):\n    return open(name).read()\n",
     "open with a computed path": "def f(user):\n    return open('/data/' + user)\n",
     "pathlib import": "from pathlib import Path\n",

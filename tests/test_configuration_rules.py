@@ -30,7 +30,9 @@ CORS_NAMES = {"CORSMiddleware", "cors"}
 
 
 def is_environment(node):
-    return isinstance(node, ast.Attribute) and node.attr == "environ" and isinstance(node.value, ast.Name) and node.value.id == "os"
+    if isinstance(node, ast.Attribute):
+        return node.attr in ("environ", "environb") and isinstance(node.value, ast.Name) and node.value.id == "os"
+    return isinstance(node, ast.Name) and node.id in ("environ", "environb")  # `from os import environ`
 
 
 # In plain English: reads one Python file's text and returns a list of (what was found, line).
@@ -39,6 +41,11 @@ def find_configuration_problems(source):
     parent = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
     problems = []
     for node in ast.walk(tree):
+        # The environment under another name would hide it from every check below.
+        if isinstance(node, ast.Import) and any(alias.name == "os" and alias.asname for alias in node.names):
+            problems.append(("imports os under another name", node.lineno))
+        if isinstance(node, ast.ImportFrom) and node.module == "os" and any(alias.name in ("environ", "environb") and alias.asname for alias in node.names):
+            problems.append(("imports the environment under another name", node.lineno))
         # Changing a setting: os.environ["X"] = ..., os.environ.update(...), os.putenv(...)
         if isinstance(node, ast.Subscript) and is_environment(node.value) and isinstance(node.ctx, (ast.Store, ast.Del)):
             problems.append(("changes the environment", node.lineno))
@@ -123,6 +130,14 @@ def test_only_the_named_settings_functions_receive_the_whole_environment():
 # ---------- The check proves itself ----------
 
 BAD = {
+    'environ imported by name, then updated': "from os import environ\n\nenviron.update({'A': 'b'})\n",
+    'environ imported by name, then assigned': "from os import environ\n\nenviron['A'] = 'b'\n",
+    'environ imported by name, then listed': 'from os import environ\n\nfor k, v in environ.items():\n    pass\n',
+    'environ imported by name, then handed on': 'from os import environ\n\nlog(environ)\n',
+    'environb assigned': "import os\n\nos.environb[b'X'] = b'y'\n",
+    'environb handed on': 'import os\n\nlog(os.environb)\n',
+    'os imported under another name': "import os as o\n\no.environ['A'] = 'b'\n",
+    'environ imported under another name': "from os import environ as e\n\ne.update({'A': 'b'})\n",
     "assigning to the environment": "import os\n\nos.environ['MODE'] = 'x'\n",
     "deleting from the environment": "import os\n\ndel os.environ['MODE']\n",
     "updating the environment": "import os\n\nos.environ.update({'A': 'b'})\n",
@@ -150,6 +165,8 @@ BAD = {
 }
 
 GOOD = {
+    'environ imported by name and read with get': "from os import environ\n\nvalue = environ.get('X')\n",
+    'environ imported by name and read by key': "from os import environ\n\nvalue = environ['X']\n",
     "reading a setting": "import os\n\nvalue = os.environ.get('DB_HOST')\nother = os.environ['DB_NAME']\nthird = os.getenv('DB_USER')\n",
     "the settings functions": "import os\n\nsettings = consumer_settings(os.environ)\nother = producer_settings(os.environ)\n",
     "a membership test is a read": "import os\n\nflag = 'X' in os.environ\n" if False else "import os\n\nflag = os.environ.get('X') is not None\n",

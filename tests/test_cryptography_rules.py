@@ -32,6 +32,7 @@ BANNED_MODULES = {
     "hashlib", "random", "ssl", "crypt",
     "cryptography", "Crypto", "Cryptodome", "nacl", "OpenSSL", "M2Crypto", "pyaes", "rsa", "ecdsa",
     "jwt", "jose", "authlib", "itsdangerous", "passlib", "bcrypt", "argon2", "scrypt", "pyotp",
+    "numpy",  # numpy.random is not a secure source of random numbers
 }
 # hmac is allowed only in these files, and only for compare_digest.
 HMAC_FILES = {"auth.py"}
@@ -195,6 +196,8 @@ def test_the_only_use_of_hmac_is_comparing_keys_in_auth():
 # Self-tests: the check must complain about each bad thing, and stay quiet for good code.
 # ---------------------------------------------------------------------------
 BAD_PROGRAMS = {
+    'numpy random': 'import numpy as np\nnp.random.rand()\n',
+    'numpy from-import': 'from numpy import random\n',
     "hashlib": "import hashlib\nhashlib.md5(b'x')\n",
     "hashlib with a nickname": "import hashlib as h\nh.sha1(b'x')\n",
     "from hashlib": "from hashlib import sha256\n",
