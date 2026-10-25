@@ -23,4 +23,4 @@ confluent-kafka==2.16.0
 
 # The tool that installs the libraries. It is pinned too, so the image never builds with whatever
 # version of pip the base image happened to ship.
-pip==26.2.1
+pip==26.2.2
