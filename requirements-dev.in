@@ -9,7 +9,7 @@
 -c requirements.txt
 
 # The test runner.
-pytest==9.1.1
+pytest==9.2.0
 
 # Lets the tests call the service's web addresses without starting a server.
 httpx==0.28.1
